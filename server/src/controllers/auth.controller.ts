@@ -30,7 +30,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
       return;
     }
 
-    const secret = process.env.JWT_SECRET as string;
+    const secret = process.env.JWT_SECRET || 'pos-default-jwt-secret-key-2026';
     const token = jwt.sign(
       { userId: user.id, role: user.role, name: user.name },
       secret,

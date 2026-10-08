@@ -61,8 +61,17 @@ app.use('/api/credits', creditsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/sms', smsRoutes);
 
+// Direct aliases for serverless rewrites
+app.use('/auth', authRoutes);
+app.use('/products', productRoutes);
+app.use('/customers', customerRoutes);
+app.use('/sales', salesRoutes);
+app.use('/credits', creditsRoutes);
+app.use('/admin', adminRoutes);
+app.use('/sms', smsRoutes);
+
 // ─── Health Check ────────────────────────────────────────────────────────────
-app.get('/api/health', (_req, res) => {
+app.get(['/api/health', '/health'], (_req, res) => {
   res.json({ success: true, message: 'POS API is running' });
 });
 
