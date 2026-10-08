@@ -2,8 +2,39 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
 import api from '../../api/axios';
+import { isAxiosError } from 'axios';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, ShoppingBag, Lock, User } from 'lucide-react';
+
+const getLoginErrorMessage = (error: unknown): string => {
+  if (!isAxiosError(error)) {
+    return error instanceof Error ? error.message : 'Login failed';
+  }
+
+  if (!error.response) {
+    return 'Could not reach the API. Check the frontend VITE_API_URL setting and try again.';
+  }
+
+  const data: unknown = error.response.data;
+  if (typeof data === 'string') return data;
+
+  if (data && typeof data === 'object') {
+    const response = data as Record<string, unknown>;
+    if (typeof response.error === 'string') return response.error;
+    if (typeof response.message === 'string') return response.message;
+
+    if (response.error && typeof response.error === 'object') {
+      const nestedError = response.error as Record<string, unknown>;
+      if (typeof nestedError.message === 'string') return nestedError.message;
+    }
+  }
+
+  if (error.response.status === 404) {
+    return 'Login API was not found. Check that VITE_API_URL points to your deployed backend.';
+  }
+
+  return 'Login failed. Please try again.';
+};
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -28,8 +59,8 @@ export default function LoginPage() {
       if (user.role === 'ADMIN') navigate('/admin/dashboard');
       else if (user.role === 'WORKER_A') navigate('/worker-a/sales');
       else navigate('/worker-b/confirm');
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Login failed');
+    } catch (err: unknown) {
+      toast.error(getLoginErrorMessage(err));
     } finally {
       setLoading(false);
     }
