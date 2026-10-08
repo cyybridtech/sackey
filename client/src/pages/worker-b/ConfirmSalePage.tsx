@@ -295,7 +295,7 @@ export default function ConfirmSalePage() {
         </div>
 
         {/* Right 5 Columns — Dispatched Items Summary */}
-        <div className="lg:col-span-5 space-y-4">
+        <div id="dispatch-items-section" className="lg:col-span-5 space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-4 sticky top-4 shadow-sm">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
@@ -462,6 +462,26 @@ export default function ConfirmSalePage() {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Mobile Floating Dispatch Summary Button */}
+      {cart.length > 0 && (
+        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-30">
+          <button
+            type="button"
+            onClick={() => {
+              const cartEl = document.getElementById('dispatch-items-section');
+              cartEl?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-2xl flex items-center justify-between transition-all active:scale-95"
+          >
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-green-400" />
+              <span className="text-sm">{cart.reduce((s, c) => s + c.quantity, 0)} pcs ({cart.length} item{cart.length > 1 ? 's' : ''})</span>
+            </div>
+            <span className="text-xs bg-white/20 px-2.5 py-1 rounded-lg font-medium">Review Dispatch Items ↓</span>
+          </button>
+        </div>
       )}
     </div>
   );

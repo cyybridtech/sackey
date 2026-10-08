@@ -12,12 +12,20 @@ export function useSocket() {
   useEffect(() => {
     if (!isAuthenticated || !token) return;
 
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+    const isLocalhost =
+      typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || (isLocalhost ? 'http://localhost:5000' : '');
+
+    if (!socketUrl) {
+      // In serverless production without a separate WebSocket server, skip socket connection
+      return;
+    }
 
     const socket = io(socketUrl, {
       auth: { token },
       transports: ['polling', 'websocket'],
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 3,
       reconnectionDelay: 2000,
     });
 

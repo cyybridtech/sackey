@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, ChevronDown } from 'lucide-react';
+import { Bell, ChevronDown, Menu } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
@@ -7,6 +7,10 @@ import { useNotificationsStore } from '../../store/notifications.store';
 import api from '../../api/axios';
 import { formatDateTime } from '../../lib/utils';
 import type { Notification } from '../../types';
+
+interface HeaderProps {
+  onToggleSidebar?: () => void;
+}
 
 const routeTitles: Record<string, string> = {
   '/admin/dashboard': 'Dashboard',
@@ -25,7 +29,7 @@ const routeTitles: Record<string, string> = {
   '/worker-b/my-confirmations': 'My Confirmations',
 };
 
-export function Header() {
+export function Header({ onToggleSidebar }: HeaderProps) {
   const { user, isAdmin } = useAuth();
   const { count, decrement } = useNotificationsStore();
   const location = useLocation();
@@ -51,18 +55,28 @@ export function Header() {
   const pageTitle = routeTitles[location.pathname] || 'POS System';
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shrink-0">
-      {/* Page Title */}
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">{pageTitle}</h1>
-        <p className="text-xs text-gray-400">
-          {new Date().toLocaleDateString('en-GH', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </p>
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0">
+      {/* Mobile Menu Toggle & Page Title */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={onToggleSidebar}
+          className="md:hidden p-2 -ml-1 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+          aria-label="Open navigation menu"
+        >
+          <Menu size={22} />
+        </button>
+        <div>
+          <h1 className="text-base sm:text-lg font-semibold text-gray-900 leading-tight">{pageTitle}</h1>
+          <p className="text-[11px] sm:text-xs text-gray-400">
+            {new Date().toLocaleDateString('en-GH', {
+              weekday: 'short',
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })}
+          </p>
+        </div>
       </div>
 
       {/* Right side */}
