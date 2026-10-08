@@ -15,6 +15,7 @@ import salesRoutes from './routes/sales.routes';
 import creditsRoutes from './routes/credits.routes';
 import adminRoutes from './routes/admin.routes';
 import smsRoutes from './routes/sms.routes';
+import prisma from './lib/prisma';
 
 const app = express();
 
@@ -70,9 +71,33 @@ app.use('/credits', creditsRoutes);
 app.use('/admin', adminRoutes);
 app.use('/sms', smsRoutes);
 
-// ─── Health Check ────────────────────────────────────────────────────────────
-app.get(['/api/health', '/health'], (_req, res) => {
-  res.json({ success: true, message: 'POS API is running' });
+// ─── Health Check & Diagnostics ──────────────────────────────────────────────
+app.get(['/api/health', '/health'], async (_req, res) => {
+  try {
+    const userCount = await prisma.user.count();
+    res.json({
+      success: true,
+      message: 'POS API is running',
+      database: 'connected',
+      usersInDb: userCount,
+      env: {
+        hasDbUrl: Boolean(process.env.DATABASE_URL),
+        hasJwtSecret: Boolean(process.env.JWT_SECRET),
+        nodeEnv: process.env.NODE_ENV,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Database connection failed',
+      error: err.message,
+      env: {
+        hasDbUrl: Boolean(process.env.DATABASE_URL),
+        hasJwtSecret: Boolean(process.env.JWT_SECRET),
+        nodeEnv: process.env.NODE_ENV,
+      },
+    });
+  }
 });
 
 // ─── Global Error Handler ────────────────────────────────────────────────────
