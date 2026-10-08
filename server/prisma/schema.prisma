@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  WORKER_A
+  WORKER_B
+}
+
+enum SaleStatus {
+  BLUE
+  RED
+  GREEN
+  FLAGGED
+}
+
+enum PaymentMode {
+  CC
+  CREDIT
+}
+
+enum SaleType {
+  WHOLESALE
+  RETAIL
+}
+
+enum CreditStatus {
+  OUTSTANDING
+  PARTIAL
+  PAID
+}
+
+enum SmsStatus {
+  PENDING
+  APPROVED
+  SENT
+  REJECTED
+}
+
+enum CustomerType {
+  WALK_IN
+  REGISTERED
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  salesAsWorkerA Sale[]         @relation("WorkerASales")
+  salesAsWorkerB Sale[]         @relation("WorkerBSales")
+  deletedSales   Sale[]         @relation("SaleDeletions")
+  payments       Payment[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@map("users")
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  brand       String?
+  category    String
+  colours     Json?
+  sizes       Json?
+  quantity    Int      @default(0)
+  price       Decimal  @db.Decimal(10, 2)
+  imageUrl    String?  @map("image_url")
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  saleItems SaleItem[]
+
+  @@map("products")
+}
+
+model Customer {
+  id           Int          @id @default(autoincrement())
+  name         String
+  phone        String?
+  email        String?
+  address      String?      @db.Text
+  customerType CustomerType @default(REGISTERED) @map("customer_type")
+  notes        String?      @db.Text
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  sales        Sale[]
+  creditLedger CreditLedger[]
+  smsQueue     SmsQueue[]
+
+  @@map("customers")
+}
+
+model Sale {
+  id             Int         @id @default(autoincrement())
+  customerId     Int         @map("customer_id")
+  workerAId      Int?        @map("worker_a_id")
+  workerBId      Int?        @map("worker_b_id")
+  status         SaleStatus  @default(BLUE)
+  stockDeducted  Boolean     @default(false) @map("stock_deducted")
+  deletedAt      DateTime?   @map("deleted_at")
+  deletedById    Int?        @map("deleted_by_id")
+  deletedByRole  Role?       @map("deleted_by_role")
+  paymentMode    PaymentMode @map("payment_mode")
+  saleType       SaleType    @default(WHOLESALE) @map("sale_type")
+  originalTotal  Decimal     @map("original_total") @db.Decimal(10, 2)
+  discountAmount Decimal     @default(0) @map("discount_amount") @db.Decimal(10, 2)
+  finalTotal     Decimal     @map("final_total") @db.Decimal(10, 2)
+  adminVerified  Boolean     @default(false) @map("admin_verified")
+  workerAData    Json?       @map("worker_a_data")
+  workerBData    Json?       @map("worker_b_data")
+  notes          String?     @db.Text
+  saleDate       DateTime    @default(now()) @map("sale_date")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  workerA      User?         @relation("WorkerASales", fields: [workerAId], references: [id])
+  workerB      User?         @relation("WorkerBSales", fields: [workerBId], references: [id])
+  deletedBy    User?         @relation("SaleDeletions", fields: [deletedById], references: [id])
+  saleItems    SaleItem[]
+  creditLedger CreditLedger?
+  smsQueue     SmsQueue[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id            Int     @id @default(autoincrement())
+  saleId        Int     @map("sale_id")
+  productId     Int     @map("product_id")
+  size          String?
+  colour        String?
+  quantity      Int
+  originalPrice Decimal @map("original_price") @db.Decimal(10, 2)
+  unitPrice     Decimal @map("unit_price") @db.Decimal(10, 2)
+  subtotal      Decimal @db.Decimal(10, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+model CreditLedger {
+  id          Int          @id @default(autoincrement())
+  customerId  Int          @map("customer_id")
+  saleId      Int          @unique @map("sale_id")
+  totalAmount Decimal      @map("total_amount") @db.Decimal(10, 2)
+  amountPaid  Decimal      @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  balance     Decimal      @db.Decimal(10, 2)
+  status      CreditStatus @default(OUTSTANDING)
+  dueDate     DateTime?    @map("due_date")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  customer Customer  @relation(fields: [customerId], references: [id])
+  sale     Sale      @relation(fields: [saleId], references: [id])
+  payments Payment[]
+
+  @@map("credit_ledger")
+}
+
+model Payment {
+  id             Int      @id @default(autoincrement())
+  creditLedgerId Int      @map("credit_ledger_id")
+  amountPaid     Decimal  @map("amount_paid") @db.Decimal(10, 2)
+  paymentDate    DateTime @default(now()) @map("payment_date")
+  recordedById   Int      @map("recorded_by_id")
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  creditLedger CreditLedger @relation(fields: [creditLedgerId], references: [id])
+  recordedBy   User         @relation(fields: [recordedById], references: [id])
+
+  @@map("payments")
+}
+
+model Notification {
+  id            Int      @id @default(autoincrement())
+  type          String
+  message       String   @db.Text
+  isRead        Boolean  @default(false) @map("is_read")
+  targetRole    Role?    @map("target_role")
+  targetUserId  Int?     @map("target_user_id")
+  relatedEntity String?  @map("related_entity")
+  relatedId     Int?     @map("related_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  targetUser User? @relation(fields: [targetUserId], references: [id])
+
+  @@map("notifications")
+}
+
+model SmsQueue {
+  id              Int       @id @default(autoincrement())
+  customerId      Int       @map("customer_id")
+  saleId          Int       @map("sale_id")
+  message         String    @db.Text
+  status          SmsStatus @default(PENDING)
+  adminApprovedAt DateTime? @map("admin_approved_at")
+  sentAt          DateTime? @map("sent_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id])
+  sale     Sale     @relation(fields: [saleId], references: [id])
+
+  @@map("sms_queue")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   Int?     @map("entity_id")
+  oldValues  Json?    @map("old_values")
+  newValues  Json?    @map("new_values")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("audit_log")
+}
