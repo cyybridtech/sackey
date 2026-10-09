@@ -178,44 +178,87 @@ export default function CreditsPage() {
       </section>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
         ) : credits.length === 0 ? (
           <div className="text-center py-16 text-slate-400">No credit records found.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  {['Customer', 'Sale Date', 'Total Amount', 'Paid', 'Balance', 'Status', 'Actions'].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {credits.map((c: any) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-slate-800">
-                      {c.customer?.name}
-                      <p className="text-xs text-slate-400">{c.customer?.phone}</p>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(c.createdAt)}</td>
-                    <td className="px-4 py-3 font-semibold">{formatCurrency(parseFloat(c.totalAmount))}</td>
-                    <td className="px-4 py-3 text-green-700">{formatCurrency(parseFloat(c.amountPaid))}</td>
-                    <td className="px-4 py-3 font-bold text-red-700">{formatCurrency(parseFloat(c.balance))}</td>
-                    <td className="px-4 py-3"><Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge></td>
-                    <td className="px-4 py-3 flex gap-2">
-                      <button onClick={() => setSelectedCredit(c)} className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-slate-50">View</button>
+          <>
+            {/* Mobile View: Cards */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {credits.map((c: any) => (
+                <div key={c.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">{c.customer?.name}</p>
+                      <p className="text-xs text-slate-400">{c.customer?.phone || 'No phone'}</p>
+                    </div>
+                    <Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1 bg-slate-50 p-2.5 rounded-lg text-xs border border-slate-100 text-center">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Total</span>
+                      <span className="font-semibold text-slate-800">{formatCurrency(parseFloat(c.totalAmount))}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Paid</span>
+                      <span className="font-semibold text-green-700">{formatCurrency(parseFloat(c.amountPaid))}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Balance</span>
+                      <span className="font-bold text-red-700">{formatCurrency(parseFloat(c.balance))}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                    <span className="text-slate-400">Date: {formatDate(c.createdAt)}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => setSelectedCredit(c)} className="text-xs px-2.5 py-1 border border-slate-200 rounded-lg hover:bg-slate-50 font-medium">View</button>
                       {c.status !== 'PAID' && (
-                        <button onClick={() => setPayCredit(c)} className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700">Pay</button>
+                        <button onClick={() => setPayCredit(c)} className="text-xs px-2.5 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold shadow-sm">Record Payment</button>
                       )}
-                    </td>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {['Customer', 'Sale Date', 'Total Amount', 'Paid', 'Balance', 'Status', 'Actions'].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {credits.map((c: any) => (
+                    <tr key={c.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-medium text-slate-800">
+                        {c.customer?.name}
+                        <p className="text-xs text-slate-400">{c.customer?.phone}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{formatDate(c.createdAt)}</td>
+                      <td className="px-4 py-3 font-semibold">{formatCurrency(parseFloat(c.totalAmount))}</td>
+                      <td className="px-4 py-3 text-green-700">{formatCurrency(parseFloat(c.amountPaid))}</td>
+                      <td className="px-4 py-3 font-bold text-red-700">{formatCurrency(parseFloat(c.balance))}</td>
+                      <td className="px-4 py-3"><Badge variant={STATUS_VARIANT[c.status]}>{c.status}</Badge></td>
+                      <td className="px-4 py-3 flex gap-2">
+                        <button onClick={() => setSelectedCredit(c)} className="text-xs px-2 py-1 border border-slate-200 rounded hover:bg-slate-50">View</button>
+                        {c.status !== 'PAID' && (
+                          <button onClick={() => setPayCredit(c)} className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700">Pay</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

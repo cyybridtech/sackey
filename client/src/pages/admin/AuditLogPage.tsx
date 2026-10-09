@@ -38,7 +38,31 @@ export default function AuditLogPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-x-auto">
+            {/* Mobile View: Cards */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {logs.map((log: any) => (
+                <div key={log.id} className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-sm space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]">{log.action}</span>
+                    <span className="text-slate-400 text-[11px]">{formatDateTime(log.createdAt)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-slate-700">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">User</span>
+                      <span className="font-semibold text-slate-800">{log.user?.name || 'System / Guest'}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px] uppercase font-semibold">Target Entity</span>
+                      <span className="font-medium text-slate-700">{log.entityType} {log.entityId ? `#${log.entityId}` : ''}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>

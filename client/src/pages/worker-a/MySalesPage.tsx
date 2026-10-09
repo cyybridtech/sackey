@@ -44,53 +44,108 @@ export default function MySalesPage() {
             <p>No sales recorded yet.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  {['Invoice #', 'Date & Time', 'Customer', 'Items Summary', 'Total Amount', 'Payment Mode', 'Sale Type', ''].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sales.map((sale: any) => (
-                  <tr key={sale.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{sale.customer?.name}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {sale.saleItems?.map((i: any) =>
-                        `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
-                      ).join(', ') || `${sale.saleItems?.length} item(s)`}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-slate-900">{formatCurrency(parseFloat(sale.finalTotal))}</td>
-                    <td className="px-4 py-3">
+          <>
+            {/* Mobile View: Cards */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {sales.map((sale: any) => (
+                <div key={sale.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-slate-700 text-sm">#{sale.id}</span>
+                    <span className="text-xs text-slate-400">{formatDateTime(sale.saleDate)}</span>
+                  </div>
+
+                  <div className="flex items-start justify-between border-t border-slate-100 pt-2">
+                    <div>
+                      <p className="font-bold text-slate-800 text-sm">{sale.customer?.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Amount</p>
+                      <p className="font-extrabold text-slate-900 text-base">{formatCurrency(parseFloat(sale.finalTotal))}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 rounded-lg p-2 text-xs text-slate-600 border border-slate-100">
+                    <p className="line-clamp-2">
+                      {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ') || `${sale.saleItems?.length} item(s)`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
+                    <div className="flex items-center gap-2">
                       <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
                         {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
                       </Badge>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        title="Delete this sale entry"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => {
-                          if (window.confirm('Remove this sale? The admin will retain and be able to review its details.')) {
-                            deleteMutation.mutate(sale.id);
-                          }
-                        }}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+                      <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px]">{sale.saleType}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      title="Delete this sale entry"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm('Remove this sale? The admin will retain and be able to review its details.')) {
+                          deleteMutation.mutate(sale.id);
+                        }
+                      }}
+                      className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View: Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {['Invoice #', 'Date & Time', 'Customer', 'Items Summary', 'Total Amount', 'Payment Mode', 'Sale Type', ''].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sales.map((sale: any) => (
+                    <tr key={sale.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
+                      <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{sale.customer?.name}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {sale.saleItems?.map((i: any) =>
+                          `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
+                        ).join(', ') || `${sale.saleItems?.length} item(s)`}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-slate-900">{formatCurrency(parseFloat(sale.finalTotal))}</td>
+                      <td className="px-4 py-3">
+                        <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
+                          {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          title="Delete this sale entry"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => {
+                            if (window.confirm('Remove this sale? The admin will retain and be able to review its details.')) {
+                              deleteMutation.mutate(sale.id);
+                            }
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

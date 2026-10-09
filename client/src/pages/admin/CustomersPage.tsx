@@ -65,90 +65,173 @@ export default function CustomersPage() {
         ) : customers.length === 0 ? (
           <div className="text-center py-16 text-slate-400">No customers found.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  {['Customer Name', 'Phone', 'Type', 'Confirmed Debt', 'Flagged Credit Exposure', 'Joined', 'Actions'].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {customers.map((c: any) => {
-                  const debt = parseFloat(c.totalDebt ?? c.totalOutstandingDebt ?? '0');
-                  const pendingDebt = parseFloat(c.pendingDebt ?? '0');
-                  return (
-                    <tr
-                      key={c.id}
-                      onClick={() => setSelectedCustomer(c)}
-                      className="hover:bg-slate-50 transition cursor-pointer"
-                    >
-                      <td className="px-4 py-3 font-semibold text-slate-900">{c.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{c.phone || '—'}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={c.customerType === 'REGISTERED' ? 'blue' : 'gray'}>
-                          {c.customerType}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
+          <>
+            {/* Mobile View: Cards */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {customers.map((c: any) => {
+                const debt = parseFloat(c.totalDebt ?? c.totalOutstandingDebt ?? '0');
+                const pendingDebt = parseFloat(c.pendingDebt ?? '0');
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedCustomer(c)}
+                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3 transition cursor-pointer hover:border-blue-300"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="font-bold text-slate-900 text-base">{c.name}</p>
+                        <p className="text-xs text-slate-500">{c.phone || 'No phone'}</p>
+                      </div>
+                      <Badge variant={c.customerType === 'REGISTERED' ? 'blue' : 'gray'}>
+                        {c.customerType}
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-lg text-xs border border-slate-100">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">Confirmed Debt</span>
                         {debt > 0 ? (
                           <span className="flex items-center gap-1 text-red-600 font-bold">
-                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <AlertTriangle className="w-3 h-3" />
                             {formatCurrency(debt)}
                           </span>
                         ) : (
-                          <span className="text-green-600 font-medium text-xs">No Confirmed Debt</span>
+                          <span className="text-green-600 font-medium">No Debt</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-semibold">Flagged Exposure</span>
                         {pendingDebt > 0 ? (
-                          <span className="inline-flex items-center gap-1 text-orange-800 bg-orange-50 border border-orange-300 px-2 py-0.5 rounded text-xs font-semibold">
-                            <AlertTriangle className="w-3 h-3" />
-                            {formatCurrency(pendingDebt)}
-                          </span>
+                          <span className="text-orange-800 font-bold">{formatCurrency(pendingDebt)}</span>
                         ) : (
-                          <span className="text-slate-400 text-xs">—</span>
+                          <span className="text-slate-400">—</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(c.createdAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1">
-                          <button
-                            title="View customer"
-                            onClick={(e) => { e.stopPropagation(); setSelectedCustomer(c); }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            title="Edit customer"
-                            onClick={(e) => { e.stopPropagation(); setEditCustomer(c); }}
-                            className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            title="Delete customer (only if there is no history)"
-                            disabled={deleteMutation.isPending}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm(`Delete ${c.name}? Customers with sales or debt history cannot be deleted.`)) {
-                                deleteMutation.mutate(c.id);
-                              }
-                            }}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs text-slate-500">
+                      <span>Joined {formatDate(c.createdAt)}</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          title="View customer"
+                          onClick={(e) => { e.stopPropagation(); setSelectedCustomer(c); }}
+                          className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="Edit customer"
+                          onClick={(e) => { e.stopPropagation(); setEditCustomer(c); }}
+                          className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="Delete customer"
+                          disabled={deleteMutation.isPending}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete ${c.name}? Customers with sales or debt history cannot be deleted.`)) {
+                              deleteMutation.mutate(c.id);
+                            }
+                          }}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {['Customer Name', 'Phone', 'Type', 'Confirmed Debt', 'Flagged Credit Exposure', 'Joined', 'Actions'].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {customers.map((c: any) => {
+                    const debt = parseFloat(c.totalDebt ?? c.totalOutstandingDebt ?? '0');
+                    const pendingDebt = parseFloat(c.pendingDebt ?? '0');
+                    return (
+                      <tr
+                        key={c.id}
+                        onClick={() => setSelectedCustomer(c)}
+                        className="hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <td className="px-4 py-3 font-semibold text-slate-900">{c.name}</td>
+                        <td className="px-4 py-3 text-slate-600">{c.phone || '—'}</td>
+                        <td className="px-4 py-3">
+                          <Badge variant={c.customerType === 'REGISTERED' ? 'blue' : 'gray'}>
+                            {c.customerType}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {debt > 0 ? (
+                            <span className="flex items-center gap-1 text-red-600 font-bold">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {formatCurrency(debt)}
+                            </span>
+                          ) : (
+                            <span className="text-green-600 font-medium text-xs">No Confirmed Debt</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {pendingDebt > 0 ? (
+                            <span className="inline-flex items-center gap-1 text-orange-800 bg-orange-50 border border-orange-300 px-2 py-0.5 rounded text-xs font-semibold">
+                              <AlertTriangle className="w-3 h-3" />
+                              {formatCurrency(pendingDebt)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(c.createdAt)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1">
+                            <button
+                              title="View customer"
+                              onClick={(e) => { e.stopPropagation(); setSelectedCustomer(c); }}
+                              className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              title="Edit customer"
+                              onClick={(e) => { e.stopPropagation(); setEditCustomer(c); }}
+                              className="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              title="Delete customer (only if there is no history)"
+                              disabled={deleteMutation.isPending}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`Delete ${c.name}? Customers with sales or debt history cannot be deleted.`)) {
+                                  deleteMutation.mutate(c.id);
+                                }
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

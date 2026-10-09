@@ -175,7 +175,7 @@ export default function SalesPage() {
         </button>
       </div>
 
-      {/* Table */}
+      {/* Sales List: Mobile Card View (md:hidden) & Desktop Table View (hidden md:block) */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="flex justify-center py-16"><Spinner /></div>
@@ -185,84 +185,177 @@ export default function SalesPage() {
             <p>No sales matching the selected filters.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  {['#', 'Date & Time', 'Customer', 'Items Summary', 'Final Total', 'Payment', 'Type', 'Verification Status', 'Staff Logged', 'Inspect'].map((h) => (
-                    <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {sales.map((sale: any) => {
-                  const sb = sale.deletedAt
-                    ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'staff'}` }
-                    : sale.status === 'FLAGGED'
-                    ? {
-                        variant: 'orange',
-                        label: sale.workerAId && sale.workerBId
-                          ? 'Mismatch Flagged'
-                          : sale.workerBId
-                            ? 'Dispatch Awaiting Sales'
-                            : sale.paymentMode === 'CREDIT'
-                              ? 'Credit Awaiting Dispatch'
-                              : 'Sales Awaiting Dispatch',
-                      }
-                    : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
-                  return (
-                    <tr
-                      key={sale.id}
-                      onClick={() => setSelectedSale(sale)}
-                      className={`hover:bg-slate-50 transition cursor-pointer ${sale.deletedAt ? 'bg-red-50/50' : sale.status === 'FLAGGED' ? 'bg-orange-50/40' : ''}`}
-                    >
-                      <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
-                      <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800">{sale.customer?.name}</p>
+          <>
+            {/* Mobile View: Card Stack */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {sales.map((sale: any) => {
+                const sb = sale.deletedAt
+                  ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'staff'}` }
+                  : sale.status === 'FLAGGED'
+                  ? {
+                      variant: 'orange',
+                      label: sale.workerAId && sale.workerBId
+                        ? 'Mismatch Flagged'
+                        : sale.workerBId
+                          ? 'Dispatch Awaiting Sales'
+                          : sale.paymentMode === 'CREDIT'
+                            ? 'Credit Awaiting Dispatch'
+                            : 'Sales Awaiting Dispatch',
+                    }
+                  : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
+
+                return (
+                  <div
+                    key={sale.id}
+                    onClick={() => setSelectedSale(sale)}
+                    className={`p-4 rounded-xl border transition cursor-pointer space-y-2.5 ${
+                      sale.deletedAt
+                        ? 'bg-red-50/60 border-red-200'
+                        : sale.status === 'FLAGGED'
+                        ? 'bg-amber-50/60 border-amber-200'
+                        : 'bg-white border-slate-200 hover:border-blue-300 shadow-sm'
+                    }`}
+                  >
+                    {/* Header: ID, Date, Status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-700 text-sm">#{sale.id}</span>
+                        <span className="text-xs text-slate-400">{formatDateTime(sale.saleDate)}</span>
+                      </div>
+                      <Badge variant={sb.variant}>{sb.label}</Badge>
+                    </div>
+
+                    {/* Customer & Total */}
+                    <div className="flex items-start justify-between gap-2 border-t border-slate-100 pt-2">
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm">{sale.customer?.name}</p>
                         <p className="text-xs text-slate-400">{sale.customer?.phone || 'No phone'}</p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 font-medium">
-                        {sale.saleItems?.length} item(s)
-                        <span className="text-xs text-slate-400 block truncate max-w-xs">
-                          {sale.saleItems?.map((i: any) =>
-                            `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
-                          ).join(', ')}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-bold text-slate-900">
-                        {!sale.deletedAt && sale.workerBId && !sale.workerAId ? '—' : formatCurrency(parseFloat(sale.finalTotal))}
-                      </td>
-                      <td className="px-4 py-3">
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[11px] text-slate-400 uppercase font-semibold">Final Total</p>
+                        <p className="font-extrabold text-slate-900 text-base">
+                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? '—' : formatCurrency(parseFloat(sale.finalTotal))}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Items Summary */}
+                    <div className="bg-slate-50 rounded-lg p-2.5 text-xs text-slate-600 border border-slate-100">
+                      <span className="font-semibold block mb-0.5 text-slate-700">{sale.saleItems?.length} item(s):</span>
+                      <p className="text-slate-500 line-clamp-2">
+                        {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ')}
+                      </p>
+                    </div>
+
+                    {/* Payment & Staff Footer */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-2">
                         {!sale.deletedAt && sale.workerBId && !sale.workerAId ? (
-                          <Badge variant="yellow">Awaiting Sales entry</Badge>
+                          <Badge variant="yellow">Awaiting Sales</Badge>
                         ) : (
                           <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
                             {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
                           </Badge>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
-                      <td className="px-4 py-3"><Badge variant={sb.variant}>{sb.label}</Badge></td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
-                        {sale.workerA && <div><span className="font-semibold text-blue-600">Sales:</span> {sale.workerA.name}</div>}
-                        {sale.workerB && <div><span className="font-semibold text-amber-600">Dispatch:</span> {sale.workerB.name}</div>}
-                        {!sale.workerA && !sale.workerB && <span>Admin Entry</span>}
-                      </td>
-                      <td className="px-4 py-3">
+                        <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px]">{sale.saleType}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                        {sale.workerA && <span>Sales: <strong className="text-slate-700">{sale.workerA.name}</strong></span>}
+                        {sale.workerB && <span>Dispatch: <strong className="text-slate-700">{sale.workerB.name}</strong></span>}
                         <button
                           onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                          className="p-1 text-blue-600 hover:bg-blue-100 rounded"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {['#', 'Date & Time', 'Customer', 'Items Summary', 'Final Total', 'Payment', 'Type', 'Verification Status', 'Staff Logged', 'Inspect'].map((h) => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sales.map((sale: any) => {
+                    const sb = sale.deletedAt
+                      ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'staff'}` }
+                      : sale.status === 'FLAGGED'
+                      ? {
+                          variant: 'orange',
+                          label: sale.workerAId && sale.workerBId
+                            ? 'Mismatch Flagged'
+                            : sale.workerBId
+                              ? 'Dispatch Awaiting Sales'
+                              : sale.paymentMode === 'CREDIT'
+                                ? 'Credit Awaiting Dispatch'
+                                : 'Sales Awaiting Dispatch',
+                        }
+                      : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
+                    return (
+                      <tr
+                        key={sale.id}
+                        onClick={() => setSelectedSale(sale)}
+                        className={`hover:bg-slate-50 transition cursor-pointer ${sale.deletedAt ? 'bg-red-50/50' : sale.status === 'FLAGGED' ? 'bg-orange-50/40' : ''}`}
+                      >
+                        <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
+                        <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-800">{sale.customer?.name}</p>
+                          <p className="text-xs text-slate-400">{sale.customer?.phone || 'No phone'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 font-medium">
+                          {sale.saleItems?.length} item(s)
+                          <span className="text-xs text-slate-400 block truncate max-w-xs">
+                            {sale.saleItems?.map((i: any) =>
+                              `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
+                            ).join(', ')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-900">
+                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? '—' : formatCurrency(parseFloat(sale.finalTotal))}
+                        </td>
+                        <td className="px-4 py-3">
+                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? (
+                            <Badge variant="yellow">Awaiting Sales entry</Badge>
+                          ) : (
+                            <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
+                              {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
+                        <td className="px-4 py-3"><Badge variant={sb.variant}>{sb.label}</Badge></td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {sale.workerA && <div><span className="font-semibold text-blue-600">Sales:</span> {sale.workerA.name}</div>}
+                          {sale.workerB && <div><span className="font-semibold text-amber-600">Dispatch:</span> {sale.workerB.name}</div>}
+                          {!sale.workerA && !sale.workerB && <span>Admin Entry</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
+                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
