@@ -13,8 +13,6 @@ interface SaleItemInput {
   productId: number;
   quantity: number;
   unitPrice: number;
-  size?: string;
-  colour?: string;
 }
 
 interface WorkerSaleData {
@@ -28,21 +26,24 @@ interface WorkerSaleData {
 
 interface SaleMatchData {
   customerId: number;
+  paymentMode: PaymentMode;
   saleType: SaleType;
-  items: Array<Pick<SaleItemInput, 'productId' | 'quantity' | 'size' | 'colour'>>;
+  items: Array<Pick<SaleItemInput, 'productId' | 'quantity'>>;
 }
 
-interface DispatchSaleData extends SaleMatchData {}
+interface DispatchSaleData extends SaleMatchData {
+  notes?: string;
+}
 
 const dispatchSnapshotToJson = (data: DispatchSaleData): Prisma.InputJsonObject => ({
   customerId: data.customerId,
+  paymentMode: data.paymentMode,
   saleType: data.saleType,
   items: data.items.map((item) => ({
     productId: item.productId,
     quantity: item.quantity,
-    ...(item.size ? { size: item.size } : {}),
-    ...(item.colour ? { colour: item.colour } : {}),
   })),
+  ...(data.notes !== undefined ? { notes: data.notes } : {}),
 });
 
 const saleSnapshotToJson = (data: WorkerSaleData): Prisma.InputJsonObject => ({
@@ -53,8 +54,6 @@ const saleSnapshotToJson = (data: WorkerSaleData): Prisma.InputJsonObject => ({
     productId: item.productId,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    ...(item.size ? { size: item.size } : {}),
-    ...(item.colour ? { colour: item.colour } : {}),
   })),
   ...(data.discountAmount !== undefined ? { discountAmount: data.discountAmount } : {}),
   ...(data.notes !== undefined ? { notes: data.notes } : {}),
@@ -67,7 +66,7 @@ class SaleConflictError extends Error {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Compare item arrays order-independently, ignoring price since Dispatch does not enter prices.
+ * Compare item arrays order-independently (productId + quantity).
  */
 const itemsMatch = (
   itemsA: SaleMatchData['items'],
@@ -80,15 +79,8 @@ const itemsMatch = (
       .map((i) => ({
         productId: Number(i.productId),
         quantity: Number(i.quantity),
-        size: i.size || '',
-        colour: i.colour || '',
       }))
-      .sort((a, b) =>
-        a.productId - b.productId ||
-        a.size.localeCompare(b.size) ||
-        a.colour.localeCompare(b.colour) ||
-        a.quantity - b.quantity
-      );
+      .sort((a, b) => a.productId - b.productId || a.quantity - b.quantity);
 
   const normA = normalize(itemsA);
   const normB = normalize(itemsB);
@@ -96,20 +88,19 @@ const itemsMatch = (
   return normA.every(
     (a, idx) =>
       a.productId === normB[idx].productId &&
-      a.quantity === normB[idx].quantity &&
-      a.size === normB[idx].size &&
-      a.colour === normB[idx].colour
+      a.quantity === normB[idx].quantity
   );
 };
 
 /**
- * A pair is valid only if customer, issue type, product variants, and quantities agree.
+ * A pair is valid only if customer, payment mode, issue type, and item quantities agree.
  */
 export const saleMatchesHelper = (
   dataA: SaleMatchData,
   dataB: SaleMatchData
 ): boolean => {
   if (dataA.customerId !== dataB.customerId) return false;
+  if (dataA.paymentMode !== dataB.paymentMode) return false;
   if (dataA.saleType !== dataB.saleType) return false;
   return itemsMatch(dataA.items, dataB.items);
 };
@@ -171,8 +162,6 @@ const toSaleItemData = (
   const unitPriceCents = Math.round(item.unitPrice * 100);
   return {
     productId: item.productId,
-    size: item.size,
-    colour: item.colour,
     quantity: item.quantity,
     originalPrice: originalPriceSnapshots?.get(item.productId) || product.price,
     unitPrice: unitPriceCents / 100,
@@ -527,7 +516,7 @@ export const workerBSale = async (
       return;
     }
 
-    const { customerId, saleType, items } = parsed.data;
+    const { customerId, paymentMode, saleType, items, notes } = parsed.data;
     const workerBId = req.user!.userId;
 
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
@@ -555,8 +544,10 @@ export const workerBSale = async (
 
     const workerBData: DispatchSaleData = {
       customerId,
+      paymentMode,
       saleType,
       items,
+      notes,
     };
 
     // Check for a pending BLUE sale (Worker A's entry) for the same customer
@@ -706,12 +697,13 @@ export const workerBSale = async (
             workerBId,
             status: initialStatus,
             stockDeducted: true,
-            paymentMode: PaymentMode.CC,
+            paymentMode,
             saleType,
             originalTotal,
             discountAmount,
             finalTotal,
             workerBData: dispatchSnapshotToJson(workerBData),
+            notes,
             saleItems: { create: nestedSaleItemData(saleItems, products) },
           },
           include: saleInclude,

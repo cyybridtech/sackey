@@ -146,7 +146,7 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
                           <span className="font-medium text-slate-800">{s.saleItems?.length} item(s)</span>
                           <span className="block text-xs text-slate-400 truncate max-w-xs">
                             {s.saleItems?.map((i: any) =>
-                              `${i.quantity}x ${i.product?.name}${i.size ? ` (${i.size})` : ''}${i.colour ? ` ${i.colour}` : ''}`
+                              `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
                             ).join(', ')}
                           </span>
                         </td>
@@ -185,7 +185,7 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
                         <span>Amount: {formatCurrency(parseFloat(ps.finalTotal))}</span>
                       </div>
                       <p className="text-slate-500">Items: {ps.saleItems?.map((i: any) =>
-                        `${i.quantity}x ${i.product?.name}${i.size ? ` (${i.size})` : ''}${i.colour ? ` ${i.colour}` : ''}`
+                        `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
                       ).join(', ')}</p>
                       <div className="flex justify-between items-center text-[11px] text-amber-700 pt-1">
                         <span>

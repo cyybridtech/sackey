@@ -13,37 +13,48 @@ const sale = {
   saleType: 'WHOLESALE',
   discountAmount: 5,
   items: [
-    { productId: 3, quantity: 2, unitPrice: 10, size: 'M', colour: 'Blue' },
-    { productId: 3, quantity: 1, unitPrice: 10, size: 'L', colour: 'Black' },
+    { productId: 3, quantity: 2, unitPrice: 10 },
+    { productId: 4, quantity: 1, unitPrice: 10 },
   ],
 };
 
-test('matching ignores payment and unit price but requires item details and issue type', () => {
+test('matching verifies customer, paymentMode, saleType, and item quantities while ignoring unit prices', () => {
   const dispatchEntry = {
-    ...sale,
-    paymentMode: undefined,
-    items: [...sale.items].reverse().map(({ unitPrice, ...item }) => item),
+    customerId: 21,
+    paymentMode: 'CC',
+    saleType: 'WHOLESALE',
+    items: [
+      { productId: 4, quantity: 1 },
+      { productId: 3, quantity: 2 },
+    ],
   };
 
   assert.equal(saleMatchesHelper(sale, dispatchEntry), true);
   assert.equal(saleMatchesHelper(sale, { ...dispatchEntry, saleType: 'RETAIL' }), false);
+  assert.equal(saleMatchesHelper(sale, { ...dispatchEntry, paymentMode: 'CREDIT' }), false);
 });
 
-test('matching rejects a different product variant or quantity', () => {
-  const wrongColour = {
-    ...sale,
-    items: sale.items.map((item, index) =>
-      index === 0 ? { ...item, colour: 'Red' } : item
-    ),
+test('matching rejects a different product or quantity', () => {
+  const wrongProduct = {
+    customerId: 21,
+    paymentMode: 'CC',
+    saleType: 'WHOLESALE',
+    items: [
+      { productId: 99, quantity: 2 },
+      { productId: 4, quantity: 1 },
+    ],
   };
   const wrongQuantity = {
-    ...sale,
-    items: sale.items.map((item, index) =>
-      index === 0 ? { ...item, quantity: 3 } : item
-    ),
+    customerId: 21,
+    paymentMode: 'CC',
+    saleType: 'WHOLESALE',
+    items: [
+      { productId: 3, quantity: 5 },
+      { productId: 4, quantity: 1 },
+    ],
   };
 
-  assert.equal(saleMatchesHelper(sale, wrongColour), false);
+  assert.equal(saleMatchesHelper(sale, wrongProduct), false);
   assert.equal(saleMatchesHelper(sale, wrongQuantity), false);
 });
 
@@ -69,18 +80,18 @@ test('sale entries await Dispatch and dispatch entries await Sales', () => {
   assert.equal(initialSaleStatusHelper(false), 'RED');
 });
 
-test('dispatch request contains no payment or pricing fields', () => {
+test('dispatch request validates paymentMode, customerId, saleType, and items without size/colour', () => {
   const result = workerBSaleSchema.safeParse({
     customerId: 21,
+    paymentMode: 'CC',
     saleType: 'WHOLESALE',
-    items: [{ productId: 3, quantity: 2, size: 'M', colour: 'Blue' }],
+    items: [{ productId: 3, quantity: 2 }],
   });
 
   assert.equal(result.success, true);
   assert.deepEqual(result.data.items[0], {
     productId: 3,
     quantity: 2,
-    size: 'M',
-    colour: 'Blue',
   });
+  assert.equal(result.data.paymentMode, 'CC');
 });

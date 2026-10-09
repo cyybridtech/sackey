@@ -17,8 +17,6 @@ interface CartItem {
   productName: string;
   brand?: string | null;
   category?: string;
-  selectedSize?: string;
-  selectedColour?: string;
   originalPrice: number;
   unitPrice: number;
   quantity: number;
@@ -37,8 +35,6 @@ export default function MakeSalePage() {
   const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
   
   // Modal selection state
-  const [modalSize, setModalSize] = useState('');
-  const [modalColour, setModalColour] = useState('');
   const [modalQty, setModalQty] = useState(1);
   const [modalUnitPrice, setModalUnitPrice] = useState<number>(0);
 
@@ -87,8 +83,6 @@ export default function MakeSalePage() {
 
   const openProductModal = (product: Product) => {
     setSelectedProductForModal(product);
-    setModalSize(product.sizes?.[0] || '');
-    setModalColour(product.colours?.[0] || '');
     setModalQty(1);
     setModalUnitPrice(Number(product.price));
   };
@@ -99,11 +93,7 @@ export default function MakeSalePage() {
     const qty = Math.max(1, Math.min(modalQty, selectedProductForModal.quantity));
 
     setCart((prev) => {
-      const existingIdx = prev.findIndex(
-        (c) => c.productId === selectedProductForModal.id &&
-               c.selectedSize === modalSize &&
-               c.selectedColour === modalColour
-      );
+      const existingIdx = prev.findIndex((c) => c.productId === selectedProductForModal.id);
       if (existingIdx >= 0) {
         const updated = [...prev];
         updated[existingIdx].quantity = Math.min(updated[existingIdx].quantity + qty, selectedProductForModal.quantity);
@@ -117,8 +107,6 @@ export default function MakeSalePage() {
           productName: selectedProductForModal.name,
           brand: selectedProductForModal.brand,
           category: selectedProductForModal.category,
-          selectedSize: modalSize,
-          selectedColour: modalColour,
           originalPrice: Number(selectedProductForModal.price),
           unitPrice: price,
           quantity: qty,
@@ -162,8 +150,6 @@ export default function MakeSalePage() {
         items: cart.map((c) => ({
           productId: c.productId,
           quantity: c.quantity,
-          size: c.selectedSize,
-          colour: c.selectedColour,
           unitPrice: c.unitPrice,
         })),
         discountAmount: discount,
@@ -195,7 +181,7 @@ export default function MakeSalePage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Point of Sale (New Sale)</h1>
-        <p className="text-slate-500 text-sm">Select products, customize variants/prices, and record sale</p>
+        <p className="text-slate-500 text-sm">Select products, customize prices, and record sale</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -384,12 +370,7 @@ export default function MakeSalePage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-bold text-slate-800">{item.productName}</p>
-                        {(item.selectedSize || item.selectedColour) && (
-                          <div className="flex gap-1.5 mt-0.5 text-[11px] text-slate-500">
-                            {item.selectedSize && <span className="bg-slate-200 px-1.5 py-0.2 rounded font-medium">Size: {item.selectedSize}</span>}
-                            {item.selectedColour && <span className="bg-slate-200 px-1.5 py-0.2 rounded font-medium">Colour: {item.selectedColour}</span>}
-                          </div>
-                        )}
+                        {item.brand && <p className="text-[11px] text-slate-400">{item.brand}</p>}
                       </div>
                       <button onClick={() => removeFromCart(idx)} className="text-slate-400 hover:text-red-600 p-1">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -468,10 +449,10 @@ export default function MakeSalePage() {
         </div>
       </div>
 
-      {/* Product Variant Selection Modal */}
+      {/* Product Quantity & Price Selection Modal */}
       {selectedProductForModal && (
         <Modal
-          title={`Select Variant — ${selectedProductForModal.name}`}
+          title={`Order — ${selectedProductForModal.name}`}
           onClose={() => setSelectedProductForModal(null)}
           size="md"
         >
@@ -487,46 +468,8 @@ export default function MakeSalePage() {
               </div>
             </div>
 
-            {/* Size Options */}
-            {selectedProductForModal.sizes && selectedProductForModal.sizes.length > 0 && (
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1.5">Select Size</label>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedProductForModal.sizes.map((s: string) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setModalSize(s)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${modalSize === s ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Colour Options */}
-            {selectedProductForModal.colours && selectedProductForModal.colours.length > 0 && (
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1.5">Select Colour</label>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedProductForModal.colours.map((c: string) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setModalColour(c)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${modalColour === c ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Quantity & Custom Price */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+            <div className="grid grid-cols-2 gap-3 pt-2">
               <div>
                 <label className="text-xs font-semibold text-slate-700 block mb-1">Quantity</label>
                 <div className="flex items-center gap-1.5">

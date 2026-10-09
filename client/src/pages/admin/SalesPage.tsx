@@ -226,7 +226,7 @@ export default function SalesPage() {
                         {sale.saleItems?.length} item(s)
                         <span className="text-xs text-slate-400 block truncate max-w-xs">
                           {sale.saleItems?.map((i: any) =>
-                            `${i.quantity}x ${i.product?.name}${i.size ? ` (${i.size})` : ''}${i.colour ? ` ${i.colour}` : ''}`
+                            `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
                           ).join(', ')}
                         </span>
                       </td>
@@ -251,7 +251,7 @@ export default function SalesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
+                          onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
                           className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
                         >
                           <Eye className="w-4 h-4" />
@@ -321,7 +321,7 @@ export default function SalesPage() {
                 <thead className="bg-slate-50">
                   <tr>
                     {[
-                      'Product / Variant',
+                      'Product',
                       'Qty',
                       ...(!selectedSale.workerAId && selectedSale.workerBId && !selectedSale.deletedAt ? [] : ['Unit Price', 'Subtotal']),
                     ].map((h) => (
@@ -333,12 +333,7 @@ export default function SalesPage() {
                   {selectedSale.saleItems?.map((item: any) => (
                     <tr key={item.id}>
                       <td className="px-3 py-2 font-medium">
-                        {item.product?.name}
-                        {(item.size || item.colour) && (
-                          <span className="block text-xs font-normal text-slate-500">
-                            {[item.size, item.colour].filter(Boolean).join(' · ')}
-                          </span>
-                        )}
+                        {item.product?.name || `Product #${item.productId}`}
                       </td>
                       <td className="px-3 py-2">{item.quantity}</td>
                       {!selectedSale.workerAId && selectedSale.workerBId && !selectedSale.deletedAt ? null : (
@@ -480,10 +475,7 @@ export default function SalesPage() {
                           <ul className="space-y-1">
                             {selectedSale.workerAData.items?.map((item: any, idx: number) => (
                               <li key={idx} className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                                <span>
-                                  Item #{item.productId}
-                                  {(item.size || item.colour) && ` · ${[item.size, item.colour].filter(Boolean).join(' / ')}`}
-                                </span>
+                                <span>Item #{item.productId}</span>
                                 <span className="font-semibold">{item.quantity} pcs @ {formatCurrency(item.unitPrice)}</span>
                               </li>
                             ))}
@@ -504,15 +496,13 @@ export default function SalesPage() {
                     {selectedSale.workerBData ? (
                       <div className="text-xs space-y-1.5">
                         <p><span className="text-slate-400">Issue Type:</span> <strong>{selectedSale.workerBData.saleType}</strong></p>
+                        <p><span className="text-slate-400">Payment:</span> <strong>{selectedSale.workerBData.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}</strong></p>
                         <div className="border-t pt-1.5">
                           <p className="font-semibold text-slate-600 mb-1">Items:</p>
                           <ul className="space-y-1">
                             {selectedSale.workerBData.items?.map((item: any, idx: number) => (
                               <li key={idx} className="flex justify-between bg-slate-50 px-2 py-1 rounded">
-                                <span>
-                                  Item #{item.productId}
-                                  {(item.size || item.colour) && ` · ${[item.size, item.colour].filter(Boolean).join(' / ')}`}
-                                </span>
+                                <span>Item #{item.productId}</span>
                                 <span className="font-semibold">{item.quantity} pcs</span>
                               </li>
                             ))}

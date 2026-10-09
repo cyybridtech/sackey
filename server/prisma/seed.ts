@@ -47,19 +47,19 @@ async function main() {
 
   // Sample products
   const products = [
-    { name: 'Classic Singlet', brand: 'ProWear', category: 'Singlets', colours: ['White', 'Black', 'Navy'], sizes: ['S', 'M', 'L', 'XL', 'XXL'], quantity: 150, price: 25.00 },
-    { name: 'Boxer Shorts', brand: 'ComfortFit', category: 'Underwear', colours: ['White', 'Grey', 'Blue'], sizes: ['S', 'M', 'L', 'XL'], quantity: 200, price: 35.00 },
-    { name: 'Sports Bra', brand: 'ActiveWear', category: 'Bras', colours: ['Black', 'White', 'Red', 'Pink'], sizes: ['32B', '34B', '36C', '38C'], quantity: 80, price: 45.00 },
-    { name: 'Cotton Underwear (Pack)', brand: 'ProWear', category: 'Underwear', colours: ['Assorted'], sizes: ['S', 'M', 'L', 'XL'], quantity: 120, price: 55.00 },
-    { name: 'Polo T-Shirt', brand: 'StylePlus', category: 'T-Shirts', colours: ['White', 'Navy', 'Red', 'Green'], sizes: ['S', 'M', 'L', 'XL', 'XXL'], quantity: 95, price: 65.00 },
-    { name: 'Thermal Vest', brand: 'WarmWear', category: 'Singlets', colours: ['White', 'Black'], sizes: ['M', 'L', 'XL'], quantity: 8, price: 40.00 },
+    { name: 'Classic Singlet', brand: 'ProWear', category: 'Singlets', quantity: 150, price: 25.00 },
+    { name: 'Boxer Shorts', brand: 'ComfortFit', category: 'Underwear', quantity: 200, price: 35.00 },
+    { name: 'Sports Bra', brand: 'ActiveWear', category: 'Bras', quantity: 80, price: 45.00 },
+    { name: 'Cotton Underwear (Pack)', brand: 'ProWear', category: 'Underwear', quantity: 120, price: 55.00 },
+    { name: 'Polo T-Shirt', brand: 'StylePlus', category: 'T-Shirts', quantity: 95, price: 65.00 },
+    { name: 'Thermal Vest', brand: 'WarmWear', category: 'Singlets', quantity: 8, price: 40.00 },
   ];
 
   for (const p of products) {
     await prisma.product.upsert({
       where: { id: (await prisma.product.findFirst({ where: { name: p.name } }))?.id || 0 },
       update: {},
-      create: { ...p, colours: p.colours, sizes: p.sizes },
+      create: p,
     });
   }
 

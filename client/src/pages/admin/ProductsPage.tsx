@@ -16,24 +16,10 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     price: product?.price?.toString() || '',
     quantity: product?.quantity?.toString() || '',
     description: product?.description || '',
-    colours: (product?.colours as string[]) || [],
-    sizes: (product?.sizes as string[]) || [],
   });
-  const [colourInput, setColourInput] = useState('');
-  const [sizeInput, setSizeInput] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [preview, setPreview] = useState(product?.imageUrl ? `/uploads/${product.imageUrl}` : '');
   const [loading, setLoading] = useState(false);
-
-  const addTag = (field: 'colours' | 'sizes', value: string) => {
-    if (!value.trim()) return;
-    setForm((f) => ({ ...f, [field]: [...f[field], value.trim()] }));
-    if (field === 'colours') setColourInput('');
-    else setSizeInput('');
-  };
-  const removeTag = (field: 'colours' | 'sizes', idx: number) => {
-    setForm((f) => ({ ...f, [field]: f[field].filter((_, i) => i !== idx) }));
-  };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -49,8 +35,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     try {
       const fd = new FormData();
       Object.entries(form).forEach(([k, v]) => {
-        if (Array.isArray(v)) fd.append(k, JSON.stringify(v));
-        else fd.append(k, v as string);
+        fd.append(k, v as string);
       });
       if (image) fd.append('image', image);
 
@@ -98,44 +83,6 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
             <label className="block text-xs font-medium text-slate-600 mb-1">Quantity *</label>
             <input required type="number" min="0" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-        </div>
-
-        {/* Colours */}
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Colours</label>
-          <div className="flex gap-2 flex-wrap mb-2">
-            {form.colours.map((c, i) => (
-              <span key={i} className="bg-slate-100 text-slate-700 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-                {c}<button type="button" onClick={() => removeTag('colours', i)} className="text-slate-400 hover:text-red-500">×</button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input value={colourInput} onChange={(e) => setColourInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag('colours', colourInput))}
-              placeholder="Type colour + Enter" className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button type="button" onClick={() => addTag('colours', colourInput)}
-              className="px-3 py-2 bg-slate-100 rounded-lg text-sm hover:bg-slate-200">Add</button>
-          </div>
-        </div>
-
-        {/* Sizes */}
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Sizes</label>
-          <div className="flex gap-2 flex-wrap mb-2">
-            {form.sizes.map((s, i) => (
-              <span key={i} className="bg-slate-100 text-slate-700 px-2 py-1 rounded-full text-xs flex items-center gap-1">
-                {s}<button type="button" onClick={() => removeTag('sizes', i)} className="text-slate-400 hover:text-red-500">×</button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input value={sizeInput} onChange={(e) => setSizeInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag('sizes', sizeInput))}
-              placeholder="Type size + Enter" className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <button type="button" onClick={() => addTag('sizes', sizeInput)}
-              className="px-3 py-2 bg-slate-100 rounded-lg text-sm hover:bg-slate-200">Add</button>
           </div>
         </div>
 
@@ -192,7 +139,7 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
   return (
     <Modal title={`Restock Inventory: ${product.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Product Variant Details */}
+        {/* Product Details */}
         <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
           <div className="flex justify-between">
             <span className="text-slate-500">Category & Brand:</span>
@@ -202,18 +149,6 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
             <span className="text-slate-500">Current Stock in Shop:</span>
             <span className="font-bold text-blue-700 text-sm">{product.quantity} units</span>
           </div>
-          {product.sizes && product.sizes.length > 0 && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">Registered Sizes:</span>
-              <span className="font-medium text-slate-700">{product.sizes.join(', ')}</span>
-            </div>
-          )}
-          {product.colours && product.colours.length > 0 && (
-            <div className="flex justify-between">
-              <span className="text-slate-500">Registered Colours:</span>
-              <span className="font-medium text-slate-700">{product.colours.join(', ')}</span>
-            </div>
-          )}
         </div>
 
         <div>
@@ -231,11 +166,11 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
 
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">
-            Restock Notes / Variant Breakdown <span className="text-slate-400 font-normal">(optional)</span>
+            Restock Notes <span className="text-slate-400 font-normal">(optional)</span>
           </label>
           <textarea
             rows={2}
-            placeholder="e.g., Added 25 pcs Size M (Black), 25 pcs Size L (White)"
+            placeholder="e.g., New stock shipment received from supplier"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -346,12 +281,6 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
                 {p.brand && <p className="text-xs text-slate-400 mb-1">{p.brand}</p>}
                 <p className="text-xs text-blue-600 font-medium mb-2">{p.category}</p>
                 <p className="text-lg font-bold text-slate-800 mb-3">{formatCurrency(parseFloat(p.price))}</p>
-                {p.sizes?.length > 0 && (
-                  <p className="text-xs text-slate-500 mb-1">Sizes: {p.sizes.join(', ')}</p>
-                )}
-                {p.colours?.length > 0 && (
-                  <p className="text-xs text-slate-500 mb-3">Colours: {p.colours.join(', ')}</p>
-                )}
                 <div className="flex gap-2">
                   <button onClick={() => setRestockProduct(p)}
                     className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-green-200 text-green-700 text-xs rounded-lg hover:bg-green-50 transition">

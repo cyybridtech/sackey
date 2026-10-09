@@ -47,7 +47,7 @@ export default function MyConfirmationsPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  {['Dispatch #', 'Date & Time', 'Customer', 'Items Dispatched', 'Issue Type', ''].map(h => (
+                  {['Dispatch #', 'Date & Time', 'Customer', 'Items Dispatched', 'Payment Mode', 'Issue Type', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -60,9 +60,10 @@ export default function MyConfirmationsPage() {
                     <td className="px-4 py-3 font-medium text-slate-900">{sale.customer?.name}</td>
                     <td className="px-4 py-3 text-slate-600">
                       {sale.saleItems?.map((i: any) =>
-                        `${i.quantity}x ${i.product?.name}${i.size ? ` (${i.size})` : ''}${i.colour ? ` ${i.colour}` : ''}`
+                        `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
                       ).join(', ') || `${sale.saleItems?.length} item(s)`}
                     </td>
+                    <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}</td>
                     <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
                     <td className="px-4 py-3">
                       <button

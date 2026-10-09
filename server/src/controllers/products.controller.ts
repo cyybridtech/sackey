@@ -103,16 +103,11 @@ export const createProduct = async (
 ): Promise<void> => {
   try {
     const { name, brand, category, quantity, price, description } = req.body;
-    let { colours, sizes } = req.body;
 
     if (!name || !category || !price) {
       res.status(400).json({ success: false, error: 'Name, category, and price are required' });
       return;
     }
-
-    // Parse JSON arrays if sent as strings
-    if (typeof colours === 'string') colours = JSON.parse(colours);
-    if (typeof sizes === 'string') sizes = JSON.parse(sizes);
 
     let imageUrl: string | undefined;
     if (req.file) {
@@ -124,8 +119,6 @@ export const createProduct = async (
         name,
         brand,
         category,
-        colours,
-        sizes,
         quantity: parseInt(quantity) || 0,
         price: parseFloat(price),
         imageUrl,
@@ -172,7 +165,6 @@ export const updateProduct = async (
   try {
     const id = parseInt(String(req.params.id));
     const { name, brand, category, quantity, price, description } = req.body;
-    let { colours, sizes } = req.body;
 
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing || !existing.isActive) {
@@ -180,15 +172,10 @@ export const updateProduct = async (
       return;
     }
 
-    if (typeof colours === 'string') colours = JSON.parse(colours);
-    if (typeof sizes === 'string') sizes = JSON.parse(sizes);
-
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (brand !== undefined) updateData.brand = brand;
     if (category !== undefined) updateData.category = category;
-    if (colours !== undefined) updateData.colours = colours;
-    if (sizes !== undefined) updateData.sizes = sizes;
     if (quantity !== undefined) updateData.quantity = parseInt(quantity);
     if (price !== undefined) updateData.price = parseFloat(price);
     if (description !== undefined) updateData.description = description;

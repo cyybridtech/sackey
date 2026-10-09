@@ -40,8 +40,6 @@ export interface Product {
   name: string;
   brand: string | null;
   category: string;
-  colours: string[] | null;
-  sizes: string[] | null;
   quantity: number;
   price: Money;
   imageUrl: string | null;
@@ -56,8 +54,6 @@ export interface SaleItem {
   saleId: number;
   productId: number;
   product?: Product;
-  size: string | null;
-  colour: string | null;
   quantity: number;
   originalPrice: Money;
   unitPrice: Money;
@@ -185,8 +181,6 @@ export interface Notification {
 export interface CartItem {
   productId: number;
   product: Product;
-  size: string;
-  colour: string;
   quantity: number;
   originalPrice: number;
   unitPrice: number;

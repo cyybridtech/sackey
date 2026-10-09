@@ -6,17 +6,19 @@ import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import QuantityInput from '../../components/ui/QuantityInput';
-import type { ApiResponse, Customer, Product, SaleType } from '../../types';
+import type { ApiResponse, Customer, Product, SaleType, PaymentMode } from '../../types';
 
 const saleTypes: SaleType[] = ['WHOLESALE', 'RETAIL'];
+const paymentModes: { value: PaymentMode; label: string }[] = [
+  { value: 'CC', label: 'Cash & Carry (CC)' },
+  { value: 'CREDIT', label: 'Credit' },
+];
 
 interface CartItem {
   productId: number;
   productName: string;
   brand?: string | null;
   category?: string;
-  selectedSize?: string;
-  selectedColour?: string;
   quantity: number;
   maxQty: number;
 }
@@ -33,11 +35,10 @@ export default function ConfirmSalePage() {
   const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
 
   // Modal selection state
-  const [modalSize, setModalSize] = useState('');
-  const [modalColour, setModalColour] = useState('');
   const [modalQty, setModalQty] = useState(1);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saleType, setSaleType] = useState<SaleType>('WHOLESALE');
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('CC');
 
   // Customer search
   const { data: customerResults = [] } = useQuery<Customer[]>({
@@ -79,8 +80,6 @@ export default function ConfirmSalePage() {
 
   const openProductModal = (product: Product) => {
     setSelectedProductForModal(product);
-    setModalSize(product.sizes?.[0] || '');
-    setModalColour(product.colours?.[0] || '');
     setModalQty(1);
   };
 
@@ -89,11 +88,7 @@ export default function ConfirmSalePage() {
     const qty = Math.max(1, Math.min(modalQty, selectedProductForModal.quantity));
 
     setCart((prev) => {
-      const existingIdx = prev.findIndex(
-        (c) => c.productId === selectedProductForModal.id &&
-               c.selectedSize === modalSize &&
-               c.selectedColour === modalColour
-      );
+      const existingIdx = prev.findIndex((c) => c.productId === selectedProductForModal.id);
       if (existingIdx >= 0) {
         const updated = [...prev];
         updated[existingIdx].quantity = Math.min(updated[existingIdx].quantity + qty, selectedProductForModal.quantity);
@@ -106,8 +101,6 @@ export default function ConfirmSalePage() {
           productName: selectedProductForModal.name,
           brand: selectedProductForModal.brand,
           category: selectedProductForModal.category,
-          selectedSize: modalSize,
-          selectedColour: modalColour,
           quantity: qty,
           maxQty: selectedProductForModal.quantity,
         },
@@ -137,11 +130,10 @@ export default function ConfirmSalePage() {
       api.post('/sales/worker-b', {
         customerId: selectedCustomer?.id,
         saleType,
+        paymentMode,
         items: cart.map((c) => ({
           productId: c.productId,
           quantity: c.quantity,
-          size: c.selectedSize,
-          colour: c.selectedColour,
         })),
       }),
     onSuccess: () => {
@@ -198,21 +190,21 @@ export default function ConfirmSalePage() {
               {showCustomerDropdown && customerResults.length > 0 && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
                   {customerResults.map((c) => (
-                      <button key={c.id} type="button"
-                        onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setShowCustomerDropdown(false); }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                        <div>
-                          <p className="font-medium text-slate-800 text-sm">{c.name}</p>
-                          <p className="text-xs text-slate-400">{c.phone || 'No phone'}</p>
-                        </div>
-                      </button>
+                    <button key={c.id} type="button"
+                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setShowCustomerDropdown(false); }}
+                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0">
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm">{c.name}</p>
+                        <p className="text-xs text-slate-400">{c.phone || 'No phone'}</p>
+                      </div>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Issue Type */}
-            <div className="pt-1">
+            {/* Sale Type and Payment Mode */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="text-xs text-slate-500 block mb-1 font-medium">Issue Type</label>
                 <div className="flex gap-1.5">
@@ -220,6 +212,18 @@ export default function ConfirmSalePage() {
                     <button key={t} type="button" onClick={() => setSaleType(t)}
                       className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${saleType === t ? 'bg-blue-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                       {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500 block mb-1 font-medium">Payment Mode</label>
+                <div className="flex gap-1.5">
+                  {paymentModes.map((pm) => (
+                    <button key={pm.value} type="button" onClick={() => setPaymentMode(pm.value)}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition ${paymentMode === pm.value ? 'bg-blue-600 text-white shadow-sm' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                      {pm.label}
                     </button>
                   ))}
                 </div>
@@ -323,12 +327,7 @@ export default function ConfirmSalePage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-bold text-slate-800">{item.productName}</p>
-                        {(item.selectedSize || item.selectedColour) && (
-                          <div className="flex gap-1.5 mt-0.5 text-[11px] text-slate-500">
-                            {item.selectedSize && <span className="bg-slate-200 px-1.5 py-0.2 rounded font-medium">Size: {item.selectedSize}</span>}
-                            {item.selectedColour && <span className="bg-slate-200 px-1.5 py-0.2 rounded font-medium">Colour: {item.selectedColour}</span>}
-                          </div>
-                        )}
+                        {item.brand && <p className="text-[11px] text-slate-400">{item.brand}</p>}
                       </div>
                       <button onClick={() => removeFromCart(idx)} className="text-slate-400 hover:text-red-600 p-1">
                         <Trash2 className="w-3.5 h-3.5" />
@@ -363,10 +362,10 @@ export default function ConfirmSalePage() {
         </div>
       </div>
 
-      {/* Product Variant Selection Modal */}
+      {/* Product Quantity Selection Modal */}
       {selectedProductForModal && (
         <Modal
-          title={`Select Variant — ${selectedProductForModal.name}`}
+          title={`Dispatch — ${selectedProductForModal.name}`}
           onClose={() => setSelectedProductForModal(null)}
           size="md"
         >
@@ -381,46 +380,8 @@ export default function ConfirmSalePage() {
               </div>
             </div>
 
-            {/* Size Options */}
-            {selectedProductForModal.sizes && selectedProductForModal.sizes.length > 0 && (
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1.5">Select Size</label>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedProductForModal.sizes.map((s: string) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setModalSize(s)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${modalSize === s ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Colour Options */}
-            {selectedProductForModal.colours && selectedProductForModal.colours.length > 0 && (
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1.5">Select Colour</label>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedProductForModal.colours.map((c: string) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setModalColour(c)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition ${modalColour === c ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Quantity */}
-            <div className="pt-2 border-t">
+            <div className="pt-2">
               <label className="text-xs font-semibold text-slate-700 block mb-1">Quantity Dispatched</label>
               <div className="flex items-center gap-1.5">
                 <button

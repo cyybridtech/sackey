@@ -4,8 +4,6 @@ import { PaymentMode, SaleType } from '../types';
 const saleItemShape = {
   productId: z.number().int().positive(),
   quantity: z.number().int().positive(),
-  size: z.string().trim().max(100).optional(),
-  colour: z.string().trim().max(100).optional(),
 };
 
 const saleBaseShape = {
@@ -26,8 +24,10 @@ export const workerASaleSchema = z.object({
 
 export const workerBSaleSchema = z.object({
   customerId: z.number().int().positive(),
+  paymentMode: z.nativeEnum(PaymentMode),
   saleType: z.nativeEnum(SaleType),
   items: z.array(z.object({
     ...saleItemShape,
   })).min(1),
+  notes: z.string().max(2000).optional(),
 });
