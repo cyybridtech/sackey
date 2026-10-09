@@ -109,9 +109,10 @@ export const createProduct = async (
       return;
     }
 
-    let imageUrl: string | undefined;
+    let imageUrl: string | undefined = req.body.imageUrl;
     if (req.file) {
-      imageUrl = `/uploads/products/${req.file.filename}`;
+      const base64 = req.file.buffer.toString('base64');
+      imageUrl = `data:${req.file.mimetype};base64,${base64}`;
     }
 
     const product = await prisma.product.create({
@@ -164,7 +165,7 @@ export const updateProduct = async (
 ): Promise<void> => {
   try {
     const id = parseInt(String(req.params.id));
-    const { name, brand, category, quantity, price, description } = req.body;
+    const { name, brand, category, quantity, price, description, imageUrl } = req.body;
 
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing || !existing.isActive) {
@@ -179,9 +180,11 @@ export const updateProduct = async (
     if (quantity !== undefined) updateData.quantity = parseInt(quantity);
     if (price !== undefined) updateData.price = parseFloat(price);
     if (description !== undefined) updateData.description = description;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
 
     if (req.file) {
-      updateData.imageUrl = `/uploads/products/${req.file.filename}`;
+      const base64 = req.file.buffer.toString('base64');
+      updateData.imageUrl = `data:${req.file.mimetype};base64,${base64}`;
     }
 
     const updated = await prisma.product.update({ where: { id }, data: updateData });

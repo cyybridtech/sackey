@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Trash2, Package } from 'lucide-react';
 import api from '../../api/axios';
+import { getProductImageUrl } from '../../lib/utils';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
@@ -269,6 +270,7 @@ export default function ConfirmSalePage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
                 {filteredProducts.map((product) => {
                   const isOutOfStock = product.quantity <= 0;
+                  const imgUrl = getProductImageUrl(product.imageUrl);
                   return (
                     <button
                       key={product.id}
@@ -277,6 +279,16 @@ export default function ConfirmSalePage() {
                       onClick={() => openProductModal(product)}
                       className={`text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${isOutOfStock ? 'opacity-40 bg-slate-50 border-slate-200 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-blue-500 hover:shadow-md cursor-pointer'}`}
                     >
+                      {/* Product image thumbnail */}
+                      {imgUrl ? (
+                        <div className="w-full h-20 mb-2 rounded-lg overflow-hidden bg-slate-100">
+                          <img src={imgUrl} alt={product.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-full h-20 mb-2 rounded-lg bg-slate-100 flex items-center justify-center">
+                          <Package className="w-6 h-6 text-slate-300" />
+                        </div>
+                      )}
                       <div>
                         <div className="flex justify-between items-start mb-1">
                           <span className="text-[11px] font-semibold text-blue-600 truncate">{product.category}</span>

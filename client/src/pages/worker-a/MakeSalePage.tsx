@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Trash2, ShoppingCart, AlertTriangle, Package } from 'lucide-react';
+import { Search, Trash2, ShoppingCart, AlertTriangle, Package, Tag } from 'lucide-react';
 import api from '../../api/axios';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, getProductImageUrl } from '../../lib/utils';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
@@ -17,6 +17,7 @@ interface CartItem {
   productName: string;
   brand?: string | null;
   category?: string;
+  imageUrl?: string | null;
   originalPrice: number;
   unitPrice: number;
   quantity: number;
@@ -107,6 +108,7 @@ export default function MakeSalePage() {
           productName: selectedProductForModal.name,
           brand: selectedProductForModal.brand,
           category: selectedProductForModal.category,
+          imageUrl: selectedProductForModal.imageUrl,
           originalPrice: Number(selectedProductForModal.price),
           unitPrice: price,
           quantity: qty,
@@ -115,7 +117,12 @@ export default function MakeSalePage() {
       ];
     });
 
-    toast.success(`Added ${qty}x ${selectedProductForModal.name} to cart`);
+    const perUnitDiff = Number(selectedProductForModal.price) - price;
+    if (perUnitDiff > 0) {
+      toast.success(`Added ${qty}x ${selectedProductForModal.name} (Discount: −${formatCurrency(perUnitDiff)}/pc)`);
+    } else {
+      toast.success(`Added ${qty}x ${selectedProductForModal.name} to cart`);
+    }
     setSelectedProductForModal(null);
   };
 
@@ -311,6 +318,7 @@ export default function MakeSalePage() {
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
                 {filteredProducts.map((product) => {
                   const isOutOfStock = product.quantity <= 0;
+                  const imgUrl = getProductImageUrl(product.imageUrl);
                   return (
                     <button
                       key={product.id}
@@ -320,6 +328,9 @@ export default function MakeSalePage() {
                       className={`text-left p-3 rounded-xl border transition-all flex flex-col justify-between ${isOutOfStock ? 'opacity-40 bg-slate-50 border-slate-200 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-blue-500 hover:shadow-md cursor-pointer'}`}
                     >
                       <div>
+                        {imgUrl && (
+                          <img src={imgUrl} alt={product.name} className="w-full h-24 object-cover rounded-lg mb-2" />
+                        )}
                         <div className="flex justify-between items-start mb-1">
                           <span className="text-[11px] font-semibold text-blue-600 truncate">{product.category}</span>
                           <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${product.quantity <= 5 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
@@ -365,45 +376,66 @@ export default function MakeSalePage() {
               </div>
             ) : (
               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-                {cart.map((item, idx) => (
-                  <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-bold text-slate-800">{item.productName}</p>
-                        {item.brand && <p className="text-[11px] text-slate-400">{item.brand}</p>}
+                {cart.map((item, idx) => {
+                  const unitDiscount = Math.max(0, item.originalPrice - item.unitPrice);
+                  const totalItemDiscount = unitDiscount * item.quantity;
+                  const itemImg = getProductImageUrl(item.imageUrl);
+                  return (
+                    <div key={idx} className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-2">
+                          {itemImg && (
+                            <img src={itemImg} alt={item.productName} className="w-8 h-8 object-cover rounded-md shrink-0 border border-slate-200" />
+                          )}
+                          <div>
+                            <p className="font-bold text-slate-800">{item.productName}</p>
+                            {item.brand && <p className="text-[11px] text-slate-400">{item.brand}</p>}
+                          </div>
+                        </div>
+                        <button onClick={() => removeFromCart(idx)} className="text-slate-400 hover:text-red-600 p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                      <button onClick={() => removeFromCart(idx)} className="text-slate-400 hover:text-red-600 p-1">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
 
-                    <div className="grid grid-cols-3 gap-2 items-center pt-1 border-t border-slate-200/60">
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Quantity</label>
-                        <QuantityInput
-                          value={item.quantity}
-                          max={item.maxQty}
-                          ariaLabel={`Quantity for ${item.productName}`}
-                          onChange={(value) => updateCartItem(idx, 'quantity', String(value))}
-                          className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold text-xs"
-                        />
+                      <div className="grid grid-cols-3 gap-2 items-center pt-1 border-t border-slate-200/60">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Quantity</label>
+                          <QuantityInput
+                            value={item.quantity}
+                            max={item.maxQty}
+                            ariaLabel={`Quantity for ${item.productName}`}
+                            onChange={(value) => updateCartItem(idx, 'quantity', String(value))}
+                            className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-center font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price (₵)</label>
+                          <MoneyInput
+                            value={item.unitPrice}
+                            onChange={(value) => updateCartItem(idx, 'unitPrice', String(value))}
+                            ariaLabel={`Unit price for ${item.productName}`}
+                            className={`w-full bg-white border rounded px-2 py-1 text-xs font-bold ${item.unitPrice < item.originalPrice ? 'text-orange-600 border-orange-300' : 'border-slate-200'}`}
+                          />
+                        </div>
+                        <div className="text-right">
+                          <label className="text-[10px] text-slate-400 block mb-0.5">Subtotal</label>
+                          <p className="font-bold text-slate-900 text-xs">{formatCurrency(item.unitPrice * item.quantity)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Unit Price (₵)</label>
-                        <MoneyInput
-                          value={item.unitPrice}
-                          onChange={(value) => updateCartItem(idx, 'unitPrice', String(value))}
-                          ariaLabel={`Unit price for ${item.productName}`}
-                          className={`w-full bg-white border rounded px-2 py-1 text-xs font-bold ${item.unitPrice < item.originalPrice ? 'text-orange-600 border-orange-300' : 'border-slate-200'}`}
-                        />
-                      </div>
-                      <div className="text-right">
-                        <label className="text-[10px] text-slate-400 block mb-0.5">Subtotal</label>
-                        <p className="font-bold text-slate-900 text-xs">{formatCurrency(item.unitPrice * item.quantity)}</p>
-                      </div>
+
+                      {/* Explicit Discount Details per item */}
+                      {unitDiscount > 0 && (
+                        <div className="flex items-center justify-between text-[11px] bg-orange-100/70 text-orange-800 px-2 py-1 rounded border border-orange-200 font-medium">
+                          <span className="flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-orange-600" />
+                            Discount: <strong>−{formatCurrency(unitDiscount)}/pc</strong>
+                          </span>
+                          <span>Total savings: <strong>−{formatCurrency(totalItemDiscount)}</strong></span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -417,10 +449,28 @@ export default function MakeSalePage() {
                 <span>Subtotal at entered prices</span>
                 <span className="font-semibold">{formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Automatic Discount</span>
-                <span className="font-semibold text-orange-700">−{formatCurrency(discount)}</span>
-              </div>
+              {discount > 0 && (
+                <div className="space-y-1 bg-orange-50 border border-orange-200 rounded-lg p-2.5">
+                  <div className="flex justify-between items-center text-orange-900 font-bold">
+                    <span>Total Discount Given</span>
+                    <span className="text-sm">−{formatCurrency(discount)}</span>
+                  </div>
+                  <div className="text-[11px] text-orange-700/90 space-y-0.5 pt-1 border-t border-orange-200/60">
+                    {cart
+                      .filter((c) => c.unitPrice < c.originalPrice)
+                      .map((c) => {
+                        const unitDisc = c.originalPrice - c.unitPrice;
+                        const lineDisc = unitDisc * c.quantity;
+                        return (
+                          <p key={c.productId} className="flex justify-between">
+                            <span>• {c.productName} (−{formatCurrency(unitDisc)}/pc × {c.quantity} pcs)</span>
+                            <span className="font-semibold">−{formatCurrency(lineDisc)}</span>
+                          </p>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between font-bold text-base border-t border-slate-200 pt-2 text-slate-900">
                 <span>Final Total</span>
                 <span className="text-blue-700">{formatCurrency(finalTotal)}</span>
@@ -458,9 +508,18 @@ export default function MakeSalePage() {
         >
           <div className="space-y-4">
             <div className="p-3 bg-slate-50 rounded-xl flex justify-between items-center text-xs">
-              <div>
-                <p className="font-bold text-slate-800 text-sm">{selectedProductForModal.name}</p>
-                <p className="text-slate-500">{selectedProductForModal.brand} · {selectedProductForModal.category}</p>
+              <div className="flex items-center gap-3">
+                {getProductImageUrl(selectedProductForModal.imageUrl) && (
+                  <img
+                    src={getProductImageUrl(selectedProductForModal.imageUrl)!}
+                    alt={selectedProductForModal.name}
+                    className="w-12 h-12 object-cover rounded-lg border border-slate-200"
+                  />
+                )}
+                <div>
+                  <p className="font-bold text-slate-800 text-sm">{selectedProductForModal.name}</p>
+                  <p className="text-slate-500">{selectedProductForModal.brand} · {selectedProductForModal.category}</p>
+                </div>
               </div>
               <div className="text-right">
                 <p className="font-bold text-sm text-blue-700">{formatCurrency(Number(selectedProductForModal.price))}</p>
@@ -501,11 +560,26 @@ export default function MakeSalePage() {
                   ariaLabel="Sale unit price"
                   className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-bold"
                 />
-                {modalUnitPrice < Number(selectedProductForModal.price) && (
-                  <p className="text-[10px] text-orange-600 mt-0.5">Discounted from {formatCurrency(Number(selectedProductForModal.price))}</p>
-                )}
               </div>
             </div>
+
+            {/* Live Discount Calculation Display */}
+            {modalUnitPrice < Number(selectedProductForModal.price) && (
+              <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-xl text-xs space-y-1">
+                <div className="flex justify-between items-center text-orange-900 font-semibold">
+                  <span>Price per unit discount:</span>
+                  <span className="font-bold text-sm text-orange-700">
+                    −{formatCurrency(Number(selectedProductForModal.price) - modalUnitPrice)}/pc
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-slate-600 text-[11px] pt-1 border-t border-orange-200/60">
+                  <span>Original: {formatCurrency(Number(selectedProductForModal.price))} → Negotiated: {formatCurrency(modalUnitPrice)}</span>
+                  <span className="font-bold text-orange-800">
+                    Total Savings: −{formatCurrency((Number(selectedProductForModal.price) - modalUnitPrice) * modalQty)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="flex gap-2 pt-3 border-t">
               <button

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, RefreshCw, Package, Search } from 'lucide-react';
+import { Plus, Edit, Trash2, RefreshCw, Package, Search, Image as ImageIcon, X } from 'lucide-react';
 import api from '../../api/axios';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, getProductImageUrl, compressImageFile } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
 import toast from 'react-hot-toast';
@@ -17,36 +17,53 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
     quantity: product?.quantity?.toString() || '',
     description: product?.description || '',
   });
-  const [image, setImage] = useState<File | null>(null);
-  const [preview, setPreview] = useState(product?.imageUrl ? `/uploads/${product.imageUrl}` : '');
+  const [imageBase64, setImageBase64] = useState<string | null>(product?.imageUrl || null);
+  const [preview, setPreview] = useState(getProductImageUrl(product?.imageUrl) || '');
   const [loading, setLoading] = useState(false);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setImage(file);
-      setPreview(URL.createObjectURL(file));
+      try {
+        const compressed = await compressImageFile(file, 600, 0.8);
+        setImageBase64(compressed);
+        setPreview(compressed);
+      } catch (err) {
+        toast.error('Failed to process image file');
+      }
     }
+  };
+
+  const removeImage = () => {
+    setImageBase64('');
+    setPreview('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => {
-        fd.append(k, v as string);
-      });
-      if (image) fd.append('image', image);
+      const payload: any = {
+        name: form.name.trim(),
+        brand: form.brand.trim() || undefined,
+        category: form.category.trim(),
+        price: parseFloat(form.price),
+        quantity: parseInt(form.quantity, 10) || 0,
+        description: form.description.trim() || undefined,
+        imageUrl: imageBase64 || null,
+      };
 
       if (product) {
-        await api.put(`/products/${product.id}`, fd);
-        toast.success('Product updated');
+        await api.put(`/products/${product.id}`, payload);
+        toast.success('Product updated successfully');
       } else {
-        await api.post('/products', fd);
-        toast.success('Product added');
+        await api.post('/products', payload);
+        toast.success('Product added successfully');
       }
       qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog-b'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to save product');
@@ -62,26 +79,31 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Name *</label>
             <input required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. Classic Singlet"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Brand</label>
             <input value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+              placeholder="e.g. ProWear"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Category *</label>
             <input required value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+              placeholder="e.g. Singlets"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Price (GH₵) *</label>
             <input required type="number" step="0.01" min="0" value={form.price} onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+              placeholder="e.g. 65.00"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Quantity *</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Quantity in Stock *</label>
             <input required type="number" min="0" value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+              placeholder="e.g. 100"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
@@ -90,14 +112,33 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Description</label>
           <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} rows={2}
+            placeholder="Optional product details..."
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
         </div>
 
-        {/* Image */}
+        {/* Image Upload */}
         <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1">Product Image</label>
-          <input type="file" accept="image/*" onChange={handleImageChange} className="text-sm" />
-          {preview && <img src={preview} alt="preview" className="mt-2 w-24 h-24 object-cover rounded-lg border border-slate-200" />}
+          <label className="block text-xs font-medium text-slate-600 mb-1">Product Photo</label>
+          {preview ? (
+            <div className="relative inline-block mt-1">
+              <img src={preview} alt="preview" className="w-28 h-28 object-cover rounded-xl border border-slate-200 shadow-sm" />
+              <button
+                type="button"
+                onClick={removeImage}
+                title="Remove image"
+                className="absolute -top-2 -right-2 p-1 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-md transition"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <label className="mt-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 cursor-pointer bg-slate-50 hover:bg-blue-50/40 transition">
+              <ImageIcon className="w-6 h-6 text-slate-400 mb-1" />
+              <span className="text-xs text-slate-600 font-medium">Click to upload product photo</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, WEBP (auto-optimized)</span>
+              <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+            </label>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">
@@ -127,6 +168,8 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
       });
       toast.success(`Restocked ${qty} units for ${product.name}`);
       qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog-b'] });
       qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
       onClose();
     } catch (err: any) {
@@ -220,7 +263,13 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/products/${id}`),
-    onSuccess: () => { toast.success('Product deleted'); qc.invalidateQueries({ queryKey: ['products'] }); },
+    onSuccess: () => {
+      toast.success('Product deleted');
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog-b'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete'),
   });
 
@@ -261,45 +310,52 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {products.map((p: any) => (
-            <div key={p.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition">
-              {p.imageUrl ? (
-                <img src={`${import.meta.env.VITE_API_URL?.replace('/api', '')}/uploads/products/${p.imageUrl}`}
-                  alt={p.name} className="w-full h-40 object-cover" />
-              ) : (
-                <div className="w-full h-40 bg-slate-100 flex items-center justify-center">
-                  <Package className="w-12 h-12 text-slate-300" />
-                </div>
-              )}
-              <div className="p-4">
-                <div className="flex justify-between items-start mb-1">
-                  <h3 className="font-semibold text-slate-800 text-sm leading-tight">{p.name}</h3>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${p.quantity <= 5 ? 'bg-red-100 text-red-700' : p.quantity <= 15 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-                    {p.quantity} left
-                  </span>
-                </div>
-                {p.brand && <p className="text-xs text-slate-400 mb-1">{p.brand}</p>}
-                <p className="text-xs text-blue-600 font-medium mb-2">{p.category}</p>
-                <p className="text-lg font-bold text-slate-800 mb-3">{formatCurrency(parseFloat(p.price))}</p>
-                <div className="flex gap-2">
-                  <button onClick={() => setRestockProduct(p)}
-                    className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-green-200 text-green-700 text-xs rounded-lg hover:bg-green-50 transition">
-                    <RefreshCw className="w-3 h-3" /> Restock
-                  </button>
-                  <button onClick={() => setEditProduct(p)}
-                    className="p-1.5 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
-                    <Edit className="w-3.5 h-3.5" />
-                  </button>
-                  {!workerMode && (
-                    <button onClick={() => { if (confirm('Delete this product?')) deleteMutation.mutate(p.id); }}
-                      className="p-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+          {products.map((p: any) => {
+            const imgUrl = getProductImageUrl(p.imageUrl);
+            return (
+              <div key={p.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition flex flex-col justify-between">
+                <div>
+                  {imgUrl ? (
+                    <img src={imgUrl} alt={p.name} className="w-full h-44 object-cover" />
+                  ) : (
+                    <div className="w-full h-44 bg-slate-100 flex items-center justify-center">
+                      <Package className="w-12 h-12 text-slate-300" />
+                    </div>
                   )}
+                  <div className="p-4 pb-2">
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="font-semibold text-slate-800 text-sm leading-tight">{p.name}</h3>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${p.quantity <= 5 ? 'bg-red-100 text-red-700' : p.quantity <= 15 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
+                        {p.quantity} left
+                      </span>
+                    </div>
+                    {p.brand && <p className="text-xs text-slate-400 mb-1">{p.brand}</p>}
+                    <p className="text-xs text-blue-600 font-medium mb-2">{p.category}</p>
+                    <p className="text-lg font-bold text-slate-800 mb-1">{formatCurrency(parseFloat(p.price))}</p>
+                    {p.description && <p className="text-xs text-slate-500 line-clamp-2 mb-2">{p.description}</p>}
+                  </div>
+                </div>
+                <div className="p-4 pt-0">
+                  <div className="flex gap-2 pt-2 border-t border-slate-100">
+                    <button onClick={() => setRestockProduct(p)}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-green-200 text-green-700 text-xs rounded-lg hover:bg-green-50 transition">
+                      <RefreshCw className="w-3 h-3" /> Restock
+                    </button>
+                    <button onClick={() => setEditProduct(p)}
+                      className="p-1.5 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition">
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    {!workerMode && (
+                      <button onClick={() => { if (confirm('Delete this product?')) deleteMutation.mutate(p.id); }}
+                        className="p-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

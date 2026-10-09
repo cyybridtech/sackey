@@ -106,15 +106,15 @@ export default function CreditsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="flex items-center gap-2 text-red-600 mb-1"><CreditCard className="w-4 h-4" /><span className="text-xs font-medium">Total Outstanding</span></div>
-            <p className="text-2xl font-bold text-red-700">{formatCurrency(summary.totalOutstandingDebt)}</p>
+            <p className="text-lg sm:text-xl xl:text-2xl font-bold text-red-700 break-words tracking-tight leading-snug">{formatCurrency(summary.totalOutstandingDebt)}</p>
           </div>
           <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
             <div className="flex items-center gap-2 text-orange-600 mb-1"><DollarSign className="w-4 h-4" /><span className="text-xs font-medium">Customers in Debt</span></div>
-            <p className="text-2xl font-bold text-orange-700">{summary.customersWithDebt}</p>
+            <p className="text-lg sm:text-xl xl:text-2xl font-bold text-orange-700 break-words tracking-tight leading-snug">{summary.customersWithDebt}</p>
           </div>
           <div className="bg-green-50 border border-green-200 rounded-xl p-4">
             <div className="flex items-center gap-2 text-green-600 mb-1"><DollarSign className="w-4 h-4" /><span className="text-xs font-medium">Total Collected</span></div>
-            <p className="text-2xl font-bold text-green-700">{formatCurrency(summary.totalCollected || 0)}</p>
+            <p className="text-lg sm:text-xl xl:text-2xl font-bold text-green-700 break-words tracking-tight leading-snug">{formatCurrency(summary.totalCollected || 0)}</p>
           </div>
         </div>
       )}
