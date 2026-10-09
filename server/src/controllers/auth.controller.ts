@@ -49,6 +49,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
           name: user.name,
           username: user.username,
           role: user.role,
+          mustChangePassword: user.mustChangePassword,
         },
       },
       message: 'Login successful',
@@ -68,7 +69,7 @@ export const getMe = async (req: Request, res: Response, next: NextFunction): Pr
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, name: true, username: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
     });
 
     if (!user) {
@@ -118,11 +119,92 @@ export const changePassword = async (
     }
 
     const newHash = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash: newHash } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash: newHash, mustChangePassword: false } });
 
     await createAuditLog(userId, 'CHANGE_PASSWORD', 'User', userId, null, null, req.ip);
 
     res.json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/auth/setup-credentials
+ * First-time login / credentials setup: worker updates username and password.
+ */
+export const setupCredentials = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { newUsername, newPassword } = req.body;
+    const userId = req.user!.userId;
+
+    if (!newUsername || !newPassword) {
+      res.status(400).json({ success: false, error: 'New username and new password are required' });
+      return;
+    }
+
+    if (newUsername.trim().length < 3) {
+      res.status(400).json({ success: false, error: 'Username must be at least 3 characters' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+      return;
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // Check if newUsername is taken by another user
+    const usernameOwner = await prisma.user.findUnique({ where: { username: newUsername.trim() } });
+    if (usernameOwner && usernameOwner.id !== userId) {
+      res.status(409).json({ success: false, error: 'Username is already taken by another account' });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        username: newUsername.trim(),
+        passwordHash,
+        mustChangePassword: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        role: true,
+        isActive: true,
+        mustChangePassword: true,
+      },
+    });
+
+    const secret = process.env.JWT_SECRET || 'pos-default-jwt-secret-key-2026';
+    const token = jwt.sign(
+      { userId: updatedUser.id, role: updatedUser.role, name: updatedUser.name },
+      secret,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as jwt.SignOptions
+    );
+
+    await createAuditLog(userId, 'SETUP_CREDENTIALS', 'User', userId, null, updatedUser, req.ip);
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        user: updatedUser,
+      },
+      message: 'Credentials updated successfully',
+    });
   } catch (err) {
     next(err);
   }

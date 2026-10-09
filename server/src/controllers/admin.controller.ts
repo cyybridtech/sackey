@@ -239,6 +239,7 @@ export const getUsers = async (
         username: true,
         role: true,
         isActive: true,
+        mustChangePassword: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -275,8 +276,8 @@ export const createUser = async (
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { name, username, passwordHash, role },
-      select: { id: true, name: true, username: true, role: true, isActive: true, createdAt: true },
+      data: { name, username, passwordHash, role, mustChangePassword: true },
+      select: { id: true, name: true, username: true, role: true, isActive: true, mustChangePassword: true, createdAt: true },
     });
 
     await createAuditLog(

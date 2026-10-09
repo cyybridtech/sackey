@@ -6,6 +6,7 @@ import AppLayout from './components/layout/AppLayout';
 
 // Auth
 import LoginPage from './pages/auth/LoginPage';
+import SetupCredentialsPage from './pages/auth/SetupCredentialsPage';
 
 // Admin
 import DashboardPage from './pages/admin/DashboardPage';
@@ -32,6 +33,7 @@ type Role = 'ADMIN' | 'WORKER_A' | 'WORKER_B';
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: Role[] }) {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword) return <Navigate to="/setup-credentials" replace />;
   if (!allowedRoles.includes(user.role as Role)) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -39,6 +41,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
 function RootRedirect() {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Navigate to="/login" replace />;
+  if (user.mustChangePassword) return <Navigate to="/setup-credentials" replace />;
   if (user.role === 'ADMIN') return <Navigate to="/admin/dashboard" replace />;
   if (user.role === 'WORKER_A') return <Navigate to="/worker-a/sales" replace />;
   return <Navigate to="/worker-b/confirm" replace />;
@@ -48,6 +51,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/setup-credentials" element={<SetupCredentialsPage />} />
       <Route path="/" element={<RootRedirect />} />
 
       {/* Admin Routes */}

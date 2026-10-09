@@ -50,14 +50,15 @@ enum CustomerType {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  name         String
-  username     String   @unique
-  passwordHash String   @map("password_hash")
-  role         Role
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                 Int      @id @default(autoincrement())
+  name               String
+  username           String   @unique
+  passwordHash       String   @map("password_hash")
+  role               Role
+  isActive           Boolean  @default(true) @map("is_active")
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   salesAsWorkerA Sale[]         @relation("WorkerASales")
   salesAsWorkerB Sale[]         @relation("WorkerBSales")

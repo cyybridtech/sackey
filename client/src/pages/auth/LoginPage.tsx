@@ -56,9 +56,16 @@ export default function LoginPage() {
       const res = await api.post('/auth/login', { username, password });
       const { user, token } = res.data.data;
       login(user, token);
-      if (user.role === 'ADMIN') navigate('/admin/dashboard');
-      else if (user.role === 'WORKER_A') navigate('/worker-a/sales');
-      else navigate('/worker-b/confirm');
+      if (user.mustChangePassword) {
+        toast.success('Please set up your new username and password.');
+        navigate('/setup-credentials');
+      } else if (user.role === 'ADMIN') {
+        navigate('/admin/dashboard');
+      } else if (user.role === 'WORKER_A') {
+        navigate('/worker-a/sales');
+      } else {
+        navigate('/worker-b/confirm');
+      }
     } catch (err: unknown) {
       toast.error(getLoginErrorMessage(err));
     } finally {
