@@ -1,5 +1,18 @@
+import { useState, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Trash2 } from 'lucide-react';
+import {
+  ClipboardList,
+  Trash2,
+  Search,
+  ShoppingCart,
+  DollarSign,
+  CreditCard,
+  Layers,
+  Clock,
+  Calendar,
+  User,
+  Tag,
+} from 'lucide-react';
 import api from '../../api/axios';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
@@ -8,6 +21,9 @@ import toast from 'react-hot-toast';
 
 export default function MySalesPage() {
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CC' | 'CREDIT'>('ALL');
+
   const { data: sales = [], isLoading } = useQuery({
     queryKey: ['my-sales'],
     queryFn: async () => {
@@ -15,10 +31,11 @@ export default function MySalesPage() {
       return res.data.data;
     },
   });
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/sales/${id}`),
     onSuccess: () => {
-      toast.success('Sale removed; the admin can review its retained details');
+      toast.success('Sale removed; the store owner can review the retained record');
       void queryClient.invalidateQueries({ queryKey: ['my-sales'] });
       void queryClient.invalidateQueries({ queryKey: ['products-catalog'] });
       void queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] });
@@ -28,46 +45,197 @@ export default function MySalesPage() {
     onError: (error: any) => toast.error(error.response?.data?.error || 'Sale could not be deleted'),
   });
 
+  // Filtered sales
+  const filteredSales = useMemo(() => {
+    return sales.filter((sale: any) => {
+      const customerName = sale.customer?.name?.toLowerCase() || '';
+      const saleId = String(sale.id);
+      const matchesSearch =
+        !search || customerName.includes(search.toLowerCase()) || saleId.includes(search);
+      const matchesPayment = paymentFilter === 'ALL' || sale.paymentMode === paymentFilter;
+      return matchesSearch && matchesPayment;
+    });
+  }, [sales, search, paymentFilter]);
+
+  // Summary Metrics
+  const stats = useMemo(() => {
+    const totalCount = sales.length;
+    let totalRevenue = 0;
+    let ccCount = 0;
+    let creditCount = 0;
+
+    sales.forEach((s: any) => {
+      totalRevenue += parseFloat(s.finalTotal || '0');
+      if (s.paymentMode === 'CC') ccCount++;
+      else if (s.paymentMode === 'CREDIT') creditCount++;
+    });
+
+    return { totalCount, totalRevenue, ccCount, creditCount };
+  }, [sales]);
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800">Sales History</h1>
-        <p className="text-slate-500 text-sm">Log of sales transactions recorded at your desk</p>
+    <div className="space-y-6">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-lg relative overflow-hidden">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold text-blue-200 border border-white/10 mb-2">
+              <ShoppingCart className="w-3.5 h-3.5" />
+              <span>Sales Desk Log</span>
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black">Sales History</h1>
+            <p className="text-blue-100/80 text-xs sm:text-sm mt-0.5">
+              Review and track customer transactions recorded from your desk
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      {/* Metrics Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+            <ClipboardList className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Sales</p>
+            <p className="text-xl font-bold text-slate-900">{stats.totalCount}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Value</p>
+            <p className="text-xl font-bold text-slate-900">{formatCurrency(stats.totalRevenue)}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center shrink-0">
+            <CreditCard className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cash & Carry</p>
+            <p className="text-xl font-bold text-slate-900">{stats.ccCount}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <Tag className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Credit Sales</p>
+            <p className="text-xl font-bold text-slate-900">{stats.creditCount}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Filter & Search Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Payment filter pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+            {[
+              { id: 'ALL', label: 'All Transactions' },
+              { id: 'CC', label: 'Cash & Carry' },
+              { id: 'CREDIT', label: 'Credit Sales' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setPaymentFilter(tab.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
+                  paymentFilter === tab.id
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Box */}
+          <div className="relative sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by customer or sale #..."
+              className="w-full pl-9 pr-3.5 py-1.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white transition"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Main List */}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         {isLoading ? (
-          <div className="flex justify-center py-16"><Spinner /></div>
-        ) : sales.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <ClipboardList className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-            <p>No sales recorded yet.</p>
+          <div className="flex justify-center py-16">
+            <Spinner />
+          </div>
+        ) : filteredSales.length === 0 ? (
+          <div className="text-center py-16 text-slate-400 space-y-2">
+            <ClipboardList className="w-12 h-12 mx-auto text-slate-300" />
+            <p className="text-sm font-medium">No sales recorded matching your filter.</p>
           </div>
         ) : (
           <>
-            {/* Mobile View: Cards */}
+            {/* Mobile View: High Polish Cards */}
             <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
-              {sales.map((sale: any) => (
-                <div key={sale.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5">
+              {filteredSales.map((sale: any) => (
+                <div
+                  key={sale.id}
+                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 transition"
+                >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-700 text-sm">#{sale.id}</span>
-                    <span className="text-xs text-slate-400">{formatDateTime(sale.saleDate)}</span>
+                    <span className="font-mono font-bold text-slate-700 text-xs px-2 py-0.5 bg-slate-100 rounded-lg">
+                      Sale #{sale.id}
+                    </span>
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {formatDateTime(sale.saleDate)}
+                    </span>
                   </div>
 
-                  <div className="flex items-start justify-between border-t border-slate-100 pt-2">
-                    <div>
-                      <p className="font-bold text-slate-800 text-sm">{sale.customer?.name}</p>
+                  <div className="flex items-start justify-between border-t border-slate-100 pt-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
+                        {sale.customer?.name?.charAt(0).toUpperCase() || 'C'}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-sm">{sale.customer?.name}</p>
+                        <p className="text-[11px] text-slate-400">{sale.customer?.phone || 'Walk-in Customer'}</p>
+                      </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Total Amount</p>
-                      <p className="font-extrabold text-slate-900 text-base">{formatCurrency(parseFloat(sale.finalTotal))}</p>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Final Total</p>
+                      <p className="font-black text-slate-900 text-base">
+                        {formatCurrency(parseFloat(sale.finalTotal))}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="bg-slate-50 rounded-lg p-2 text-xs text-slate-600 border border-slate-100">
-                    <p className="line-clamp-2">
-                      {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ') || `${sale.saleItems?.length} item(s)`}
-                    </p>
+                  {/* Itemized List */}
+                  <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700 border border-slate-100 space-y-1.5">
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      <Layers className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Items Purchased</span>
+                    </div>
+                    {sale.saleItems?.map((item: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center text-xs">
+                        <span className="font-medium text-slate-800">
+                          {item.quantity}x {item.product?.name || `Product #${item.productId}`}
+                        </span>
+                        <span className="text-slate-500 font-mono">
+                          {formatCurrency(parseFloat(item.subtotal))}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
@@ -75,7 +243,9 @@ export default function MySalesPage() {
                       <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
                         {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
                       </Badge>
-                      <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px]">{sale.saleType}</span>
+                      <span className="text-slate-600 font-bold px-2 py-0.5 bg-slate-100 rounded text-[11px]">
+                        {sale.saleType}
+                      </span>
                     </div>
 
                     <button
@@ -83,11 +253,15 @@ export default function MySalesPage() {
                       title="Delete this sale entry"
                       disabled={deleteMutation.isPending}
                       onClick={() => {
-                        if (window.confirm('Remove this sale? The admin will retain and be able to review its details.')) {
+                        if (
+                          window.confirm(
+                            'Remove this sale? The store owner will retain and be able to review its details.'
+                          )
+                        ) {
                           deleteMutation.mutate(sale.id);
                         }
                       }}
-                      className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50 flex items-center gap-1 text-xs font-semibold"
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-xl disabled:opacity-50 flex items-center gap-1 text-xs font-bold border border-red-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Delete</span>
@@ -97,45 +271,59 @@ export default function MySalesPage() {
               ))}
             </div>
 
-            {/* Desktop View: Table */}
+            {/* Desktop View: Clean Table */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    {['Invoice #', 'Date & Time', 'Customer', 'Items Summary', 'Total Amount', 'Payment Mode', 'Sale Type', ''].map(h => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                    ))}
+                    {['Sale #', 'Date & Time', 'Customer', 'Items Summary', 'Payment', 'Type', 'Total Amount', 'Action'].map(
+                      (h) => (
+                        <th key={h} className="text-left px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                          {h}
+                        </th>
+                      )
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {sales.map((sale: any) => (
-                    <tr key={sale.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
-                      <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">{sale.customer?.name}</td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {sale.saleItems?.map((i: any) =>
-                          `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
-                        ).join(', ') || `${sale.saleItems?.length} item(s)`}
+                  {filteredSales.map((sale: any) => (
+                    <tr key={sale.id} className="hover:bg-slate-50/80 transition">
+                      <td className="px-5 py-3.5 font-mono font-bold text-xs text-slate-700">#{sale.id}</td>
+                      <td className="px-5 py-3.5 text-slate-500 text-xs">{formatDateTime(sale.saleDate)}</td>
+                      <td className="px-5 py-3.5 font-bold text-slate-900">{sale.customer?.name}</td>
+                      <td className="px-5 py-3.5 text-xs text-slate-600 max-w-xs truncate">
+                        {sale.saleItems
+                          ?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`)
+                          .join(', ') || `${sale.saleItems?.length} item(s)`}
                       </td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{formatCurrency(parseFloat(sale.finalTotal))}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3.5">
                         <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
                           {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-3.5">
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                          {sale.saleType}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 font-extrabold text-slate-900">
+                        {formatCurrency(parseFloat(sale.finalTotal))}
+                      </td>
+                      <td className="px-5 py-3.5">
                         <button
                           type="button"
-                          title="Delete this sale entry"
                           disabled={deleteMutation.isPending}
                           onClick={() => {
-                            if (window.confirm('Remove this sale? The admin will retain and be able to review its details.')) {
+                            if (
+                              window.confirm(
+                                'Remove this sale? The store owner will retain and be able to review its details.'
+                              )
+                            ) {
                               deleteMutation.mutate(sale.id);
                             }
                           }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
+                          title="Delete sale"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
