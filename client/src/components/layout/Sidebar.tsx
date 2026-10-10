@@ -137,7 +137,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </nav>
 
         {/* User Info + Logout */}
-        <div className="border-t border-white/10 px-3 py-4">
+        <div className="border-t border-white/10 px-3 pt-4 pb-12 sm:pb-4 bg-gray-900">
           <div className="flex items-center gap-3 px-2 mb-3">
             <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
               {user?.name?.charAt(0).toUpperCase()}
@@ -151,7 +151,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
           <button
             onClick={handleLogout}
-            className="sidebar-link sidebar-link-inactive w-full text-red-400 hover:bg-red-900/30 hover:text-red-300"
+            className="sidebar-link sidebar-link-inactive w-full text-red-400 hover:bg-red-900/30 hover:text-red-300 font-semibold"
           >
             <LogOut size={18} />
             <span>Sign Out</span>

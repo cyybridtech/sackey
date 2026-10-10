@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, ChevronDown, Menu } from 'lucide-react';
+import { Bell, ChevronDown, Menu, LogOut } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
@@ -30,7 +30,7 @@ const routeTitles: Record<string, string> = {
 };
 
 export function Header({ onToggleSidebar }: HeaderProps) {
-  const { user, isAdmin } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const { count, decrement } = useNotificationsStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -54,8 +54,13 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   const pageTitle = routeTitles[location.pathname] || 'POS System';
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 shrink-0">
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-6 shrink-0 shadow-sm">
       {/* Mobile Menu Toggle & Page Title */}
       <div className="flex items-center gap-2 sm:gap-3">
         <button
@@ -80,7 +85,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
       </div>
 
       {/* Right side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* Notification Bell — Admin Only */}
         {isAdmin && (
           <div className="relative">
@@ -126,9 +131,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </div>
         )}
 
-        {/* User Avatar */}
-        <div className="flex items-center gap-2 pl-3 border-l border-gray-200">
-          <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white text-sm font-bold">
+        {/* User Profile Info */}
+        <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-gray-200">
+          <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0">
             {user?.name?.charAt(0).toUpperCase()}
           </div>
           <div className="hidden sm:block">
@@ -137,7 +142,16 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               {user?.role?.replace('_', ' ')}
             </p>
           </div>
-          <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
+
+          {/* Prominent Header Logout Button */}
+          <button
+            onClick={handleLogout}
+            title="Sign Out"
+            className="ml-1 px-2.5 py-1.5 text-red-600 hover:bg-red-600 hover:text-white rounded-lg transition-all flex items-center gap-1.5 font-semibold text-xs border border-red-200 bg-red-50/80 shadow-xs"
+          >
+            <LogOut size={15} />
+            <span>Logout</span>
+          </button>
         </div>
       </div>
     </header>
