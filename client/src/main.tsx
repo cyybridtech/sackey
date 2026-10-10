@@ -29,8 +29,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 
+// Capture PWA install prompt globally as early as possible
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  (window as any).deferredInstallPrompt = e;
+  window.dispatchEvent(new CustomEvent('pos:installprompt-ready'));
+});
+
 // Register service worker for PWA support
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err) => {
       console.log('ServiceWorker registration failed: ', err);
