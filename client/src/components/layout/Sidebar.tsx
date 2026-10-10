@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -13,8 +13,11 @@ import {
   ListOrdered,
   Store,
   X,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useInstallApp } from '../../hooks/useInstallApp';
+import InstallAppModal from '../ui/InstallAppModal';
 import { cn } from '../../lib/utils';
 
 interface NavItem {
@@ -59,6 +62,8 @@ const roleLabels: Record<string, string> = {
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { user, logout, isAdmin, isWorkerA } = useAuth();
+  const { isInstalled, isIOS, hasNativePrompt, promptInstall } = useInstallApp();
+  const [showInstallModal, setShowInstallModal] = useState(false);
   const navigate = useNavigate();
 
   const navItems = isAdmin ? adminNavItems : isWorkerA ? workerANavItems : workerBNavItems;
@@ -114,7 +119,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 pb-4 scrollbar-thin">
+        <nav className="flex-1 overflow-y-auto px-3 pb-4 scrollbar-thin space-y-3">
           <ul className="space-y-0.5">
             {navItems.map((item) => (
               <li key={item.to}>
@@ -134,6 +139,30 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </li>
             ))}
           </ul>
+
+          {/* Prominent Install App Banner in Menu */}
+          {!isInstalled && (
+            <div className="pt-2 px-1">
+              <button
+                type="button"
+                onClick={() => {
+                  promptInstall(() => setShowInstallModal(true));
+                }}
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl p-3 shadow-lg flex items-center gap-3 text-left transition transform active:scale-95 border border-blue-400/30"
+              >
+                <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                  <Smartphone className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold leading-tight flex items-center gap-1.5">
+                    <span>Install App</span>
+                    <span className="bg-amber-400 text-slate-900 text-[9px] font-extrabold px-1.5 py-0.2 rounded-full uppercase">Phone</span>
+                  </p>
+                  <p className="text-[10px] text-blue-100">Add to home screen</p>
+                </div>
+              </button>
+            </div>
+          )}
         </nav>
 
         {/* User Info + Logout */}
@@ -158,6 +187,15 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </button>
         </div>
       </aside>
+
+      {/* Install App Modal */}
+      <InstallAppModal
+        isOpen={showInstallModal}
+        onClose={() => setShowInstallModal(false)}
+        isIOS={isIOS}
+        hasNativePrompt={hasNativePrompt}
+        onNativeInstall={() => promptInstall()}
+      />
     </>
   );
 }
