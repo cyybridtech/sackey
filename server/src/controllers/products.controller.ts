@@ -39,7 +39,124 @@ export const getProducts = async (
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json({ success: true, data: products });
+    const role = req.user?.role;
+    const userId = req.user?.userId;
+
+    if (role === Role.WORKER_A && userId) {
+      // Fetch quantities reserved in pending BLUE sales created by Worker A
+      const pendingSales = await prisma.sale.findMany({
+        where: {
+          workerAId: userId,
+          status: 'BLUE',
+          deletedAt: null,
+        },
+        select: {
+          saleItems: {
+            select: {
+              productId: true,
+              quantity: true,
+            },
+          },
+        },
+      });
+
+      const pendingMap: Record<number, number> = {};
+      for (const s of pendingSales) {
+        for (const item of s.saleItems) {
+          pendingMap[item.productId] = (pendingMap[item.productId] || 0) + item.quantity;
+        }
+      }
+
+      const workerAProducts = products.map((p) => {
+        const reserved = pendingMap[p.id] || 0;
+        return {
+          ...p,
+          quantity: Math.max(0, p.quantity - reserved),
+          confirmedStock: p.quantity,
+          pendingSalesQty: reserved,
+        };
+      });
+
+      res.json({ success: true, data: workerAProducts });
+      return;
+    }
+
+    if (role === Role.WORKER_B && userId) {
+      // Fetch quantities reserved in pending RED sales created by Worker B
+      const pendingSales = await prisma.sale.findMany({
+        where: {
+          workerBId: userId,
+          status: 'RED',
+          deletedAt: null,
+        },
+        select: {
+          saleItems: {
+            select: {
+              productId: true,
+              quantity: true,
+            },
+          },
+        },
+      });
+
+      const pendingMap: Record<number, number> = {};
+      for (const s of pendingSales) {
+        for (const item of s.saleItems) {
+          pendingMap[item.productId] = (pendingMap[item.productId] || 0) + item.quantity;
+        }
+      }
+
+      const workerBProducts = products.map((p) => {
+        const reserved = pendingMap[p.id] || 0;
+        return {
+          ...p,
+          quantity: Math.max(0, p.quantity - reserved),
+          confirmedStock: p.quantity,
+          pendingDispatchQty: reserved,
+        };
+      });
+
+      res.json({ success: true, data: workerBProducts });
+      return;
+    }
+
+    // For Admin: include pending BLUE and RED counts per product for complete visibility
+    const pendingBlue = await prisma.sale.findMany({
+      where: { status: 'BLUE', deletedAt: null },
+      select: { saleItems: { select: { productId: true, quantity: true } } },
+    });
+    const pendingRed = await prisma.sale.findMany({
+      where: { status: 'RED', deletedAt: null },
+      select: { saleItems: { select: { productId: true, quantity: true } } },
+    });
+
+    const blueMap: Record<number, number> = {};
+    for (const s of pendingBlue) {
+      for (const item of s.saleItems) {
+        blueMap[item.productId] = (blueMap[item.productId] || 0) + item.quantity;
+      }
+    }
+
+    const redMap: Record<number, number> = {};
+    for (const s of pendingRed) {
+      for (const item of s.saleItems) {
+        redMap[item.productId] = (redMap[item.productId] || 0) + item.quantity;
+      }
+    }
+
+    const adminProducts = products.map((p) => {
+      const pendingSalesQty = blueMap[p.id] || 0;
+      const pendingDispatchQty = redMap[p.id] || 0;
+      return {
+        ...p,
+        availableForSales: Math.max(0, p.quantity - pendingSalesQty),
+        availableForDispatch: Math.max(0, p.quantity - pendingDispatchQty),
+        pendingSalesQty,
+        pendingDispatchQty,
+      };
+    });
+
+    res.json({ success: true, data: adminProducts });
   } catch (err) {
     next(err);
   }

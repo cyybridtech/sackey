@@ -326,11 +326,26 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
                     <div className="flex justify-between items-start mb-1">
                       <h3 className="font-semibold text-slate-800 text-sm leading-tight">{p.name}</h3>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${p.quantity <= 5 ? 'bg-red-100 text-red-700' : p.quantity <= 15 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'}`}>
-                        {p.quantity} left
+                        {p.quantity} in stock
                       </span>
                     </div>
                     {p.brand && <p className="text-xs text-slate-400 mb-1">{p.brand}</p>}
                     <p className="text-xs text-blue-600 font-medium mb-2">{p.category}</p>
+
+                    {/* Worker A & Worker B independent live stock preview for Admin */}
+                    {!workerMode && (p.pendingSalesQty > 0 || p.pendingDispatchQty > 0) && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 text-[11px] space-y-1 mb-2">
+                        <div className="flex justify-between text-slate-600">
+                          <span>Sales Desk (Worker A):</span>
+                          <strong className="text-blue-700">{p.availableForSales ?? p.quantity} left</strong>
+                        </div>
+                        <div className="flex justify-between text-slate-600">
+                          <span>Dispatch (Worker B):</span>
+                          <strong className="text-amber-700">{p.availableForDispatch ?? p.quantity} left</strong>
+                        </div>
+                      </div>
+                    )}
+
                     <p className="text-lg font-bold text-slate-800 mb-1">{formatCurrency(parseFloat(p.price))}</p>
                     {p.description && <p className="text-xs text-slate-500 line-clamp-2 mb-2">{p.description}</p>}
                   </div>

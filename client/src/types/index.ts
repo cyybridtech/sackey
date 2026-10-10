@@ -42,6 +42,11 @@ export interface Product {
   brand: string | null;
   category: string;
   quantity: number;
+  confirmedStock?: number;
+  availableForSales?: number;
+  availableForDispatch?: number;
+  pendingSalesQty?: number;
+  pendingDispatchQty?: number;
   price: Money;
   imageUrl: string | null;
   description: string | null;

@@ -157,7 +157,7 @@ export default function ConfirmSalePage() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-28 lg:pb-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Goods Dispatch & Stock Issue Log</h1>
         <p className="text-slate-500 text-sm">Record customer goods dispatch and stock issue transactions</p>
@@ -439,20 +439,20 @@ export default function ConfirmSalePage() {
 
       {/* Mobile Floating Dispatch Summary Button */}
       {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-30">
+        <div className="lg:hidden fixed bottom-8 sm:bottom-6 left-4 right-4 z-30">
           <button
             type="button"
             onClick={() => {
               const cartEl = document.getElementById('dispatch-items-section');
               cartEl?.scrollIntoView({ behavior: 'smooth' });
             }}
-            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-2xl flex items-center justify-between transition-all active:scale-95"
+            className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-2xl flex items-center justify-between transition-all active:scale-95 border border-slate-700/50"
           >
             <div className="flex items-center gap-2">
               <Package className="w-5 h-5 text-green-400" />
-              <span className="text-sm">{cart.reduce((s, c) => s + c.quantity, 0)} pcs ({cart.length} item{cart.length > 1 ? 's' : ''})</span>
+              <span className="text-sm font-semibold">{cart.reduce((s, c) => s + c.quantity, 0)} pcs ({cart.length} item{cart.length > 1 ? 's' : ''})</span>
             </div>
-            <span className="text-xs bg-white/20 px-2.5 py-1 rounded-lg font-medium">Review Dispatch Items ↓</span>
+            <span className="text-xs bg-white/20 px-2.5 py-1 rounded-lg font-bold">Review Dispatch Items ↓</span>
           </button>
         </div>
       )}

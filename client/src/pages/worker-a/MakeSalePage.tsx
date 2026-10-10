@@ -185,7 +185,7 @@ export default function MakeSalePage() {
   const customerDebt = Number(selectedCustomer?.totalDebt ?? 0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-28 lg:pb-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">Point of Sale (New Sale)</h1>
         <p className="text-slate-500 text-sm">Select products, customize prices, and record sale</p>
@@ -604,22 +604,22 @@ export default function MakeSalePage() {
 
       {/* Mobile Floating Cart Summary Button */}
       {cart.length > 0 && (
-        <div className="lg:hidden fixed bottom-4 left-4 right-4 z-30">
+        <div className="lg:hidden fixed bottom-8 sm:bottom-6 left-4 right-4 z-30">
           <button
             type="button"
             onClick={() => {
               const cartEl = document.getElementById('pos-cart-section');
               cartEl?.scrollIntoView({ behavior: 'smooth' });
             }}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-2xl flex items-center justify-between transition-all active:scale-95"
+            className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold py-3.5 px-4 rounded-xl shadow-2xl flex items-center justify-between transition-all active:scale-95 border border-blue-400/30"
           >
             <div className="flex items-center gap-2">
               <ShoppingCart className="w-5 h-5" />
-              <span className="text-sm">{cart.reduce((s, c) => s + c.quantity, 0)} pcs ({cart.length} item{cart.length > 1 ? 's' : ''})</span>
+              <span className="text-sm font-semibold">{cart.reduce((s, c) => s + c.quantity, 0)} pcs ({cart.length} item{cart.length > 1 ? 's' : ''})</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-extrabold">{formatCurrency(finalTotal)}</span>
-              <span className="text-[11px] bg-white/20 px-2 py-0.5 rounded font-medium">Review Cart ↓</span>
+              <span className="text-[11px] bg-white/20 px-2 py-1 rounded-lg font-bold">Review Cart ↓</span>
             </div>
           </button>
         </div>
