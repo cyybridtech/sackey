@@ -366,6 +366,83 @@ export const updateUser = async (
   }
 };
 
+/**
+ * DELETE /api/admin/users/:id
+ * Delete a user account (admin cannot delete themselves).
+ */
+export const deleteUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id));
+
+    if (isNaN(id)) {
+      res.status(400).json({ success: false, error: 'Invalid user ID' });
+      return;
+    }
+
+    if (id === req.user!.userId) {
+      res.status(400).json({ success: false, error: 'You cannot delete your own admin account' });
+      return;
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            salesAsWorkerA: true,
+            salesAsWorkerB: true,
+            payments: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'User not found' });
+      return;
+    }
+
+    // If user has historical sales or payments, archive them safely without breaking foreign key records
+    const hasHistory =
+      (existing._count.salesAsWorkerA +
+        existing._count.salesAsWorkerB +
+        existing._count.payments) >
+      0;
+
+    if (hasHistory) {
+      await prisma.user.update({
+        where: { id },
+        data: {
+          isActive: false,
+          username: `${existing.username}_deleted_${Date.now()}`,
+        },
+      });
+    } else {
+      await prisma.auditLog.deleteMany({ where: { userId: id } });
+      await prisma.notification.deleteMany({ where: { targetUserId: id } });
+      await prisma.user.delete({ where: { id } });
+    }
+
+    await createAuditLog(
+      req.user!.userId,
+      'DELETE_USER',
+      'User',
+      id,
+      existing,
+      null,
+      req.ip
+    );
+
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── Audit Log ────────────────────────────────────────────────────────────────
 
 /**

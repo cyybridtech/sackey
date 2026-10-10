@@ -5,6 +5,7 @@ import {
   getUsers,
   createUser,
   updateUser,
+  deleteUser,
   getAuditLog,
   getNotifications,
   markNotificationRead,
@@ -27,6 +28,7 @@ router.get('/dashboard/sales-report', getSalesReport);
 router.get('/users', getUsers);
 router.post('/users', createUser);
 router.put('/users/:id', updateUser);
+router.delete('/users/:id', deleteUser);
 
 // Audit log
 router.get('/audit-log', getAuditLog);
