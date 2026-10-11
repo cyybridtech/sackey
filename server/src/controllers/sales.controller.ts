@@ -277,17 +277,51 @@ const handleCreditLedger = async (
   }
 };
 
-/** Queue a sale-confirmation SMS as part of the sale transaction. */
+/** Queue an itemized sale-confirmation receipt SMS as part of the sale transaction. */
 const queueSaleSms = async (
   tx: Prisma.TransactionClient,
   customerId: number,
   saleId: number,
   customerName: string,
   finalTotal: number,
-  paymentMode: PaymentMode
+  paymentMode: PaymentMode,
+  saleItems?: Array<{ product?: { name?: string | null }; quantity: number; unitPrice?: any; subtotal?: any }> | null,
+  amountPaid?: number
 ): Promise<void> => {
-  const modeText = paymentMode === PaymentMode.CC ? 'Cash/Card' : 'Credit';
-  const message = `Dear ${customerName}, your sale (ID: ${saleId}) of GH₵ ${finalTotal.toFixed(2)} via ${modeText} has been confirmed. Thank you!`;
+  const modeText = paymentMode === PaymentMode.CC ? 'Cash' : 'Credit';
+
+  // Format list of items
+  let itemsSummary = '';
+  if (saleItems && saleItems.length > 0) {
+    const maxListed = 10;
+    const lines = saleItems.slice(0, maxListed).map((item) => {
+      const pName = item.product?.name || 'Item';
+      const lineTotal = item.subtotal
+        ? Number(item.subtotal).toFixed(2)
+        : (item.quantity * Number(item.unitPrice || 0)).toFixed(2);
+      return `• ${item.quantity}x ${pName} - GH₵${lineTotal}`;
+    });
+
+    if (saleItems.length > maxListed) {
+      lines.push(`+ ${saleItems.length - maxListed} more item(s)`);
+    }
+
+    itemsSummary = `\nItems Bought:\n${lines.join('\n')}`;
+  }
+
+  let paymentDetails = `Total: GH₵ ${finalTotal.toFixed(2)} (${modeText})`;
+  if (paymentMode === PaymentMode.CREDIT && amountPaid && amountPaid > 0) {
+    const remaining = Math.max(0, finalTotal - amountPaid);
+    paymentDetails += `\nDeposit: GH₵ ${amountPaid.toFixed(2)} | Balance: GH₵ ${remaining.toFixed(2)}`;
+  }
+
+  const message =
+    `B.A. Ent Receipt\n` +
+    `Sale #${saleId}\n` +
+    `Customer: ${customerName}${itemsSummary}\n` +
+    `${paymentDetails}\n` +
+    `Thank you for your purchase!`;
+
   await tx.smsQueue.create({ data: { customerId, saleId, message } });
 };
 
@@ -441,7 +475,16 @@ export const workerASale = async (
             await handleCreditLedger(tx, resolvedCustomerId, updated.id, finalTotal, amountPaid || 0, workerAId);
           }
           if (customer.phone) {
-            await queueSaleSms(tx, resolvedCustomerId, updated.id, customer.name, finalTotal, paymentMode);
+            await queueSaleSms(
+              tx,
+              resolvedCustomerId,
+              updated.id,
+              customer.name,
+              finalTotal,
+              paymentMode,
+              updated.saleItems,
+              amountPaid
+            );
           }
 
           return updated;
@@ -699,7 +742,9 @@ export const workerBSale = async (
               updated.id,
               customer.name,
               greenFinal,
-              blueData.paymentMode
+              blueData.paymentMode,
+              updated.saleItems,
+              blueData.amountPaid
             );
           }
 

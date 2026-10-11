@@ -219,9 +219,9 @@ export default function SmsQueuePage() {
                     {item.status}
                   </Badge>
                 </div>
-                <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs sm:text-sm text-slate-700 mb-3 leading-relaxed">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Message Body
+                <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs sm:text-sm text-slate-800 mb-3 leading-relaxed whitespace-pre-line font-mono">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1 font-sans">
+                    Receipt Message Preview
                   </span>
                   {item.message}
                 </div>
