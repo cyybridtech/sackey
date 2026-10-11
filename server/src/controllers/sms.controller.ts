@@ -78,7 +78,7 @@ export const approveSms = async (
     if (!sendResult.success) {
       res.status(400).json({
         success: false,
-        error: sendResult.error || 'Failed to send SMS through Vynfy',
+        error: sendResult.error || 'Failed to send SMS',
         providerResponse: sendResult.providerResponse,
       });
       return;
@@ -97,7 +97,7 @@ export const approveSms = async (
     res.json({
       success: true,
       data: updated,
-      message: 'SMS approved and sent successfully via Vynfy',
+      message: 'SMS approved and sent successfully',
       providerResponse: sendResult.providerResponse,
     });
   } catch (err) {
@@ -191,7 +191,7 @@ export const approveBulkSms = async (
     res.json({
       success: true,
       data: results,
-      message: `${successCount}/${entries.length} SMS messages sent via Vynfy`,
+      message: `${successCount}/${entries.length} SMS messages sent successfully`,
     });
   } catch (err) {
     next(err);
@@ -200,7 +200,7 @@ export const approveBulkSms = async (
 
 /**
  * POST /api/sms/test
- * Send an immediate test SMS via Vynfy to verify credentials and sender ID.
+ * Send an immediate test SMS to verify credentials and sender ID.
  */
 export const sendTestSms = async (
   req: Request,
@@ -215,13 +215,13 @@ export const sendTestSms = async (
       return;
     }
 
-    const testMessage = message || 'Hello! This is a test notification from your POS system via Vynfy.';
+    const testMessage = message || 'Hello! This is a test notification from B.A. Ent.';
     const result = await sendSms(phone, testMessage);
 
     if (!result.success) {
       res.status(400).json({
         success: false,
-        error: result.error || 'Failed to dispatch test SMS via Vynfy',
+        error: result.error || 'Failed to dispatch test SMS',
         providerResponse: result.providerResponse,
       });
       return;

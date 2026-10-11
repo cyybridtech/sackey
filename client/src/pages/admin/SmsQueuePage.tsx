@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Check, X, CheckCheck, Send, ShieldAlert, Radio } from 'lucide-react';
+import { MessageSquare, Check, X, CheckCheck, Send } from 'lucide-react';
 import api from '../../api/axios';
 import { formatDateTime } from '../../lib/utils';
 import Badge from '../../components/ui/Badge';
@@ -18,7 +18,7 @@ export default function SmsQueuePage() {
   // Test SMS Modal state
   const [showTestModal, setShowTestModal] = useState(false);
   const [testPhone, setTestPhone] = useState('');
-  const [testMessage, setTestMessage] = useState('Hello! This is a test message from your POS system via Vynfy SMS.');
+  const [testMessage, setTestMessage] = useState('Hello! This is a test message from B.A. Ent.');
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['sms-queue'],
@@ -32,12 +32,12 @@ export default function SmsQueuePage() {
   const approveMutation = useMutation({
     mutationFn: (id: number) => api.post(`/sms/approve/${id}`),
     onSuccess: (res: any) => {
-      toast.success(res.data?.message || 'SMS approved and dispatched via Vynfy!');
+      toast.success(res.data?.message || 'SMS approved and sent successfully!');
       qc.invalidateQueries({ queryKey: ['sms-queue'] });
       qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
     },
     onError: (err: any) => {
-      toast.error(err.response?.data?.error || 'Failed to send SMS via Vynfy');
+      toast.error(err.response?.data?.error || 'Failed to send SMS');
     },
   });
 
@@ -66,7 +66,7 @@ export default function SmsQueuePage() {
   const testSmsMutation = useMutation({
     mutationFn: () => api.post('/sms/test', { phone: testPhone, message: testMessage }),
     onSuccess: (res: any) => {
-      toast.success(res.data?.message || 'Test SMS dispatched successfully via Vynfy!');
+      toast.success(res.data?.message || 'Test SMS dispatched successfully!');
       setShowTestModal(false);
       setTestPhone('');
     },
@@ -93,10 +93,9 @@ export default function SmsQueuePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-800">SMS Gateway Queue</h1>
-            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold text-xs flex items-center gap-1">
-              <Radio className="w-3 h-3 text-blue-600 animate-pulse" />
-              Powered by Vynfy
+            <h1 className="text-2xl font-bold text-slate-800">SMS Notifications Queue</h1>
+            <span className="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200">
+              Sender ID: B.A. Ent
             </span>
           </div>
           <p className="text-slate-500 text-sm">
@@ -126,7 +125,7 @@ export default function SmsQueuePage() {
             t === 'PENDING'
               ? 'Pending Approval'
               : t === 'SENT'
-              ? 'Sent via Vynfy'
+              ? 'Sent'
               : t === 'REJECTED'
               ? 'Rejected'
               : 'All Messages';
@@ -217,7 +216,7 @@ export default function SmsQueuePage() {
                     </p>
                   </div>
                   <Badge variant={TAB_VARIANT[item.status] as any}>
-                    {item.status === 'SENT' ? 'Sent (Vynfy)' : item.status}
+                    {item.status}
                   </Badge>
                 </div>
                 <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 text-xs sm:text-sm text-slate-700 mb-3 leading-relaxed">
@@ -265,13 +264,13 @@ export default function SmsQueuePage() {
       {/* Send Test SMS Modal */}
       {showTestModal && (
         <Modal
-          title="Send Test SMS (Vynfy Gateway)"
+          title="Send Test SMS"
           onClose={() => setShowTestModal(false)}
           size="sm"
         >
           <div className="space-y-4 text-slate-700">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 leading-relaxed">
-              Verify your Vynfy SMS connection and Sender ID by sending a real-time test SMS to a phone number.
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 leading-relaxed">
+              Verify message delivery with Sender ID <strong>B.A. Ent</strong> by sending a test SMS to a phone number.
             </div>
 
             <div>

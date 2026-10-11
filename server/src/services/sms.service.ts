@@ -39,18 +39,18 @@ export const sendSms = async (
   message: string
 ): Promise<SmsSendResult> => {
   const apiKey = process.env.VYNFY_API_KEY || 'ffc6f3cebdc352541da86d0b6af5a3d7';
-  const senderId = process.env.VYNFY_SENDER_ID || 'POS';
+  const senderId = process.env.VYNFY_SENDER_ID || 'B.A. Ent';
   const apiUrl = process.env.VYNFY_API_URL || 'https://sms.vynfy.com/api/v1/send';
 
   const formattedPhone = formatPhoneNumber(phone);
 
   if (!formattedPhone) {
     const err = `Invalid recipient phone number: "${phone}"`;
-    console.error(`[Vynfy SMS] Error: ${err}`);
+    console.error(`[SMS Gateway] Error: ${err}`);
     return { success: false, error: err };
   }
 
-  console.log(`[Vynfy SMS] Attempting send to ${formattedPhone} using Sender ID "${senderId}"...`);
+  console.log(`[SMS Gateway] Attempting send to ${formattedPhone} using Sender ID "${senderId}"...`);
 
   try {
     const payload = {
