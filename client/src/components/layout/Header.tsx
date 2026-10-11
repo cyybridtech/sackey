@@ -65,8 +65,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
 
   return (
     <>
-      <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-6 shrink-0 shadow-sm">
-        {/* Mobile Menu Toggle & Page Title */}
+      <header className="pt-[env(safe-area-inset-top,0px)] bg-white border-b border-gray-200 shrink-0 shadow-sm z-30">
+        <div className="h-16 flex items-center justify-between px-3 sm:px-6">
+          {/* Mobile Menu Toggle & Page Title */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
@@ -171,7 +172,8 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             </button>
           </div>
         </div>
-      </header>
+      </div>
+    </header>
 
       {/* Install App Modal */}
       <InstallAppModal

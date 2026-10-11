@@ -21,7 +21,9 @@ export const getCustomers = async (
   try {
     const { search, customerType } = req.query;
 
-    const where: any = {};
+    const where: any = {
+      NOT: { name: { startsWith: '[Archived]' } },
+    };
 
     if (customerType) where.customerType = customerType as string;
 
@@ -257,15 +259,20 @@ export const deleteCustomer = async (
       res.status(404).json({ success: false, error: 'Customer not found' });
       return;
     }
-    if (customer._count.sales || customer._count.creditLedger || customer._count.smsQueue) {
-      res.status(409).json({
-        success: false,
-        error: 'Customers with sales, debt, or SMS history cannot be deleted. Edit the customer record instead.',
+    const hasHistory = (customer._count.sales + customer._count.creditLedger + customer._count.smsQueue) > 0;
+
+    if (hasHistory) {
+      await prisma.customer.update({
+        where: { id },
+        data: {
+          name: customer.name.startsWith('[Archived]') ? customer.name : `[Archived] ${customer.name}`,
+          notes: `${customer.notes || ''} [Deleted/Archived on ${new Date().toISOString()}]`,
+        },
       });
-      return;
+    } else {
+      await prisma.customer.delete({ where: { id } });
     }
 
-    await prisma.customer.delete({ where: { id } });
     await createAuditLog(req.user!.userId, 'DELETE_CUSTOMER', 'Customer', id, customer, null, req.ip);
     res.json({ success: true, message: 'Customer deleted successfully' });
   } catch (err) {

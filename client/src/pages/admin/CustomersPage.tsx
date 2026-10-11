@@ -7,6 +7,7 @@ import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
 import CustomerDetailModal from '../../components/admin/CustomerDetailModal';
 import AddCustomerModal from '../../components/admin/AddCustomerModal';
+import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 export default function CustomersPage() {
@@ -15,6 +16,7 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [editCustomer, setEditCustomer] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const { data: customers = [], isLoading, refetch } = useQuery({
     queryKey: ['customers', search],
@@ -131,9 +133,7 @@ export default function CustomersPage() {
                           disabled={deleteMutation.isPending}
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm(`Delete ${c.name}? Customers with sales or debt history cannot be deleted.`)) {
-                              deleteMutation.mutate(c.id);
-                            }
+                            setDeleteTarget(c);
                           }}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
                         >
@@ -211,13 +211,11 @@ export default function CustomersPage() {
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button
-                              title="Delete customer (only if there is no history)"
+                              title="Delete customer"
                               disabled={deleteMutation.isPending}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                if (window.confirm(`Delete ${c.name}? Customers with sales or debt history cannot be deleted.`)) {
-                                  deleteMutation.mutate(c.id);
-                                }
+                                setDeleteTarget(c);
                               }}
                               className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
                             >
@@ -240,6 +238,21 @@ export default function CustomersPage() {
       )}
       {showAdd && <AddCustomerModal onClose={() => { setShowAdd(false); refetch(); }} />}
       {editCustomer && <AddCustomerModal customer={editCustomer} onClose={() => { setEditCustomer(null); refetch(); }} />}
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Customer"
+        itemName={deleteTarget?.name}
+        message="Are you sure you want to remove this customer? If the customer has past transactions, they will be safely archived without losing financial history."
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

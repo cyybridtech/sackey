@@ -41,6 +41,7 @@ export default function MakeSalePage() {
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMode, setPaymentMode] = useState<'CC' | 'CREDIT'>('CC');
+  const [upfrontPaid, setUpfrontPaid] = useState<number>(0);
   const [saleType, setSaleType] = useState<SaleType>('WHOLESALE');
   const [notes, setNotes] = useState('');
 
@@ -160,6 +161,7 @@ export default function MakeSalePage() {
           unitPrice: c.unitPrice,
         })),
         discountAmount: discount,
+        amountPaid: paymentMode === 'CREDIT' && upfrontPaid > 0 ? upfrontPaid : undefined,
         notes,
       }),
     onSuccess: () => {
@@ -171,14 +173,25 @@ export default function MakeSalePage() {
       setCart([]);
       setSelectedCustomer(null);
       setCustomerSearch('');
+      setUpfrontPaid(0);
       setNotes('');
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to submit sale'),
   });
 
   const handleSubmit = () => {
-    if (!selectedCustomer) { toast.error('Please select a customer'); return; }
-    if (cart.length === 0) { toast.error('Please add at least one product to the sale'); return; }
+    if (!selectedCustomer && paymentMode !== 'CC') {
+      toast.error('Please select a customer for Credit sales');
+      return;
+    }
+    if (cart.length === 0) {
+      toast.error('Please add at least one product to the sale');
+      return;
+    }
+    if (paymentMode === 'CREDIT' && upfrontPaid > finalTotal) {
+      toast.error('Upfront deposit cannot be greater than the final total');
+      return;
+    }
     saleMutation.mutate();
   };
 
@@ -198,7 +211,14 @@ export default function MakeSalePage() {
           {/* Customer & Sale Mode Section */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-slate-700 text-sm">Customer Details</h3>
+              <div>
+                <h3 className="font-semibold text-slate-700 text-sm">Customer Details</h3>
+                {paymentMode === 'CC' && !selectedCustomer && (
+                  <p className="text-[11px] text-emerald-600 font-medium">
+                    Cash & Carry: Name is optional (defaults to Walk-in Customer)
+                  </p>
+                )}
+              </div>
               {selectedCustomer && (
                 <button onClick={() => setSelectedCustomer(null)} className="text-xs text-blue-600 hover:underline">
                   Change Customer
@@ -213,7 +233,7 @@ export default function MakeSalePage() {
                 value={selectedCustomer ? selectedCustomer.name : customerSearch}
                 onChange={(e) => { setCustomerSearch(e.target.value); setSelectedCustomer(null); setShowCustomerDropdown(true); }}
                 onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="Type customer name or phone number..."
+                placeholder={paymentMode === 'CC' ? 'Walk-in Customer (Optional for Cash & Carry)' : 'Type customer name or phone number...'}
                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
               {showCustomerDropdown && customerResults.length > 0 && (
@@ -228,10 +248,14 @@ export default function MakeSalePage() {
                           <p className="font-medium text-slate-800 text-sm">{c.name}</p>
                           <p className="text-xs text-slate-400">{c.phone || 'No phone'}</p>
                         </div>
-                        {debt > 0 && (
-                          <span className="text-xs text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" />
-                            Owes {formatCurrency(debt)}
+                        {debt > 0 ? (
+                          <span className="text-xs text-red-700 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3 text-red-600" />
+                            Debt: {formatCurrency(debt)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
+                            ✓ No Debt
                           </span>
                         )}
                       </button>
@@ -475,6 +499,32 @@ export default function MakeSalePage() {
                 <span>Final Total</span>
                 <span className="text-blue-700">{formatCurrency(finalTotal)}</span>
               </div>
+
+              {/* Upfront Part-Payment / Deposit for Credit Sales */}
+              {paymentMode === 'CREDIT' && (
+                <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-bold text-amber-900">
+                      Amount Paid Upfront (Deposit)
+                    </label>
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-semibold px-2 py-0.5 rounded-full">
+                      Optional Part-Payment
+                    </span>
+                  </div>
+                  <MoneyInput
+                    value={upfrontPaid}
+                    onChange={setUpfrontPaid}
+                    ariaLabel="Upfront deposit payment"
+                    className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-sm font-bold text-slate-800"
+                  />
+                  <div className="flex justify-between items-center text-xs font-semibold pt-1 border-t border-amber-200/60">
+                    <span className="text-slate-600">Remaining Debt:</span>
+                    <span className="text-red-700 font-bold">
+                      {formatCurrency(Math.max(0, finalTotal - (upfrontPaid || 0)))}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Notes */}
@@ -490,7 +540,7 @@ export default function MakeSalePage() {
 
             <button
               onClick={handleSubmit}
-              disabled={saleMutation.isPending || !selectedCustomer || cart.length === 0}
+              disabled={saleMutation.isPending || (!selectedCustomer && paymentMode !== 'CC') || cart.length === 0}
               className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold rounded-lg text-sm transition shadow-sm flex items-center justify-center gap-2"
             >
               {saleMutation.isPending ? 'Recording Sale...' : 'Record Sale'}

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Search, Trash2, Package } from 'lucide-react';
 import api from '../../api/axios';
-import { getProductImageUrl } from '../../lib/utils';
+import { formatCurrency, getProductImageUrl } from '../../lib/utils';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
@@ -151,8 +151,14 @@ export default function ConfirmSalePage() {
   });
 
   const handleSubmit = () => {
-    if (!selectedCustomer) { toast.error('Please select a customer'); return; }
-    if (cart.length === 0) { toast.error('Please add at least one product'); return; }
+    if (!selectedCustomer && paymentMode !== 'CC') {
+      toast.error('Please select a customer for Credit dispatch');
+      return;
+    }
+    if (cart.length === 0) {
+      toast.error('Please add at least one product');
+      return;
+    }
     saleMutation.mutate();
   };
 
@@ -170,7 +176,14 @@ export default function ConfirmSalePage() {
           {/* Customer & Sale Mode Section */}
           <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
             <div className="flex justify-between items-center">
-              <h3 className="font-semibold text-slate-700 text-sm">Customer</h3>
+              <div>
+                <h3 className="font-semibold text-slate-700 text-sm">Customer</h3>
+                {paymentMode === 'CC' && !selectedCustomer && (
+                  <p className="text-[11px] text-emerald-600 font-medium">
+                    Cash & Carry: Name is optional (defaults to Walk-in Customer)
+                  </p>
+                )}
+              </div>
               {selectedCustomer && (
                 <button onClick={() => setSelectedCustomer(null)} className="text-xs text-blue-600 hover:underline">
                   Change
@@ -185,21 +198,33 @@ export default function ConfirmSalePage() {
                 value={selectedCustomer ? selectedCustomer.name : customerSearch}
                 onChange={(e) => { setCustomerSearch(e.target.value); setSelectedCustomer(null); setShowCustomerDropdown(true); }}
                 onFocus={() => setShowCustomerDropdown(true)}
-                placeholder="Search customer by name or phone..."
+                placeholder={paymentMode === 'CC' ? 'Walk-in Customer (Optional for Cash & Carry)' : 'Search customer by name or phone...'}
                 className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
               {showCustomerDropdown && customerResults.length > 0 && (
                 <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                  {customerResults.map((c) => (
-                    <button key={c.id} type="button"
-                      onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setShowCustomerDropdown(false); }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0">
-                      <div>
-                        <p className="font-medium text-slate-800 text-sm">{c.name}</p>
-                        <p className="text-xs text-slate-400">{c.phone || 'No phone'}</p>
-                      </div>
-                    </button>
-                  ))}
+                  {customerResults.map((c) => {
+                    const debt = Number(c.totalDebt ?? 0);
+                    return (
+                      <button key={c.id} type="button"
+                        onClick={() => { setSelectedCustomer(c); setCustomerSearch(''); setShowCustomerDropdown(false); }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex justify-between items-center">
+                        <div>
+                          <p className="font-medium text-slate-800 text-sm">{c.name}</p>
+                          <p className="text-xs text-slate-400">{c.phone || 'No phone'}</p>
+                        </div>
+                        {debt > 0 ? (
+                          <span className="text-xs text-red-700 font-bold bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                            Debt: {formatCurrency(debt)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
+                            ✓ No Debt
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -365,7 +390,7 @@ export default function ConfirmSalePage() {
 
             <button
               onClick={handleSubmit}
-              disabled={saleMutation.isPending || !selectedCustomer || cart.length === 0}
+              disabled={saleMutation.isPending || (!selectedCustomer && paymentMode !== 'CC') || cart.length === 0}
               className="w-full py-2.5 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white font-bold rounded-lg text-sm transition shadow-sm flex items-center justify-center gap-2"
             >
               {saleMutation.isPending ? 'Saving Record...' : 'Save Dispatch Record'}

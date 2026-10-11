@@ -14,12 +14,14 @@ import api from '../../api/axios';
 import { formatDateTime } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
+import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 export default function MyConfirmationsPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CC' | 'CREDIT'>('ALL');
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const { data: sales = [], isLoading } = useQuery({
     queryKey: ['my-confirmations'],
@@ -240,15 +242,7 @@ export default function MyConfirmationsPage() {
                       type="button"
                       title="Delete this dispatch entry"
                       disabled={deleteMutation.isPending}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            'Remove this dispatch? The store owner will retain and be able to review its details.'
-                          )
-                        ) {
-                          deleteMutation.mutate(sale.id);
-                        }
-                      }}
+                      onClick={() => setDeleteTarget(sale)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-xl disabled:opacity-50 flex items-center gap-1 text-xs font-bold border border-red-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -298,15 +292,7 @@ export default function MyConfirmationsPage() {
                         <button
                           type="button"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                'Remove this dispatch? The store owner will retain and be able to review its details.'
-                              )
-                            ) {
-                              deleteMutation.mutate(sale.id);
-                            }
-                          }}
+                          onClick={() => setDeleteTarget(sale)}
                           className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
                           title="Delete dispatch"
                         >
@@ -321,6 +307,21 @@ export default function MyConfirmationsPage() {
           </>
         )}
       </div>
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Dispatch Entry"
+        itemName={deleteTarget ? `Dispatch #${deleteTarget.id}` : undefined}
+        message="Remove this dispatch? The store owner will retain and be able to review its details in the dispatch log."
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

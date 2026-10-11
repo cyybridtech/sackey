@@ -7,7 +7,7 @@ const saleItemShape = {
 };
 
 const saleBaseShape = {
-  customerId: z.number().int().positive(),
+  customerId: z.number().int().positive().optional().nullable(),
   paymentMode: z.nativeEnum(PaymentMode),
   saleType: z.nativeEnum(SaleType),
   notes: z.string().max(2000).optional(),
@@ -20,10 +20,11 @@ export const workerASaleSchema = z.object({
     unitPrice: z.number().finite().nonnegative(),
   })).min(1),
   discountAmount: z.number().finite().nonnegative().default(0),
+  amountPaid: z.number().finite().nonnegative().optional(),
 });
 
 export const workerBSaleSchema = z.object({
-  customerId: z.number().int().positive(),
+  customerId: z.number().int().positive().optional().nullable(),
   paymentMode: z.nativeEnum(PaymentMode),
   saleType: z.nativeEnum(SaleType),
   items: z.array(z.object({

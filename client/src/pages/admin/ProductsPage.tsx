@@ -5,6 +5,7 @@ import api from '../../api/axios';
 import { formatCurrency, getProductImageUrl, compressImageFile } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 function ProductFormModal({ product, onClose }: { product?: any; onClose: () => void }) {
@@ -244,6 +245,7 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
   const [showAdd, setShowAdd] = useState(false);
   const [editProduct, setEditProduct] = useState<any>(null);
   const [restockProduct, setRestockProduct] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products', search, category],
@@ -361,7 +363,7 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
                       <Edit className="w-3.5 h-3.5" />
                     </button>
                     {!workerMode && (
-                      <button onClick={() => { if (confirm('Delete this product?')) deleteMutation.mutate(p.id); }}
+                      <button onClick={() => setDeleteTarget(p)}
                         className="p-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -377,6 +379,21 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
       {showAdd && <ProductFormModal onClose={() => setShowAdd(false)} />}
       {editProduct && <ProductFormModal product={editProduct} onClose={() => setEditProduct(null)} />}
       {restockProduct && <RestockModal product={restockProduct} onClose={() => setRestockProduct(null)} />}
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteMutation.mutate(deleteTarget.id);
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Product"
+        itemName={deleteTarget?.name}
+        message="Are you sure you want to deactivate and remove this product from inventory?"
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

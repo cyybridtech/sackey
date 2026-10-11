@@ -43,78 +43,24 @@ export const getProducts = async (
     const userId = req.user?.userId;
 
     if (role === Role.WORKER_A && userId) {
-      // Fetch quantities reserved in pending BLUE sales created by Worker A
-      const pendingSales = await prisma.sale.findMany({
-        where: {
-          workerAId: userId,
-          status: 'BLUE',
-          deletedAt: null,
-        },
-        select: {
-          saleItems: {
-            select: {
-              productId: true,
-              quantity: true,
-            },
-          },
-        },
-      });
-
-      const pendingMap: Record<number, number> = {};
-      for (const s of pendingSales) {
-        for (const item of s.saleItems) {
-          pendingMap[item.productId] = (pendingMap[item.productId] || 0) + item.quantity;
-        }
-      }
-
-      const workerAProducts = products.map((p) => {
-        const reserved = pendingMap[p.id] || 0;
-        return {
-          ...p,
-          quantity: Math.max(0, p.quantity - reserved),
-          confirmedStock: p.quantity,
-          pendingSalesQty: reserved,
-        };
-      });
+      // Worker A sees current confirmed stock. Stock quantity only deducts when Worker B confirms
+      const workerAProducts = products.map((p) => ({
+        ...p,
+        quantity: p.quantity,
+        confirmedStock: p.quantity,
+      }));
 
       res.json({ success: true, data: workerAProducts });
       return;
     }
 
     if (role === Role.WORKER_B && userId) {
-      // Fetch quantities reserved in pending RED sales created by Worker B
-      const pendingSales = await prisma.sale.findMany({
-        where: {
-          workerBId: userId,
-          status: 'RED',
-          deletedAt: null,
-        },
-        select: {
-          saleItems: {
-            select: {
-              productId: true,
-              quantity: true,
-            },
-          },
-        },
-      });
-
-      const pendingMap: Record<number, number> = {};
-      for (const s of pendingSales) {
-        for (const item of s.saleItems) {
-          pendingMap[item.productId] = (pendingMap[item.productId] || 0) + item.quantity;
-        }
-      }
-
-      const workerBProducts = products.map((p) => {
-        const reserved = pendingMap[p.id] || 0;
-        return {
-          ...p,
-          quantity: Math.max(0, p.quantity - reserved),
-          confirmedStock: p.quantity,
-          pendingDispatchQty: reserved,
-        };
-      });
+      // Worker B sees current warehouse stock
+      const workerBProducts = products.map((p) => ({
+        ...p,
+        quantity: p.quantity,
+        confirmedStock: p.quantity,
+      }));
 
       res.json({ success: true, data: workerBProducts });
       return;

@@ -7,6 +7,7 @@ import { formatCurrency, formatDateTime } from '../../lib/utils';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 const STATUS_BADGE: Record<string, { variant: any; label: string }> = {
@@ -20,6 +21,7 @@ export default function SalesPage() {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedSale, setSelectedSale] = useState<any>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editingSale, setEditingSale] = useState(false);
   const [saleEditForm, setSaleEditForm] = useState({ notes: '', discountAmount: '', saleType: 'WHOLESALE' });
   
@@ -462,11 +464,7 @@ export default function SalesPage() {
                 {!selectedSale.deletedAt && (
                   <button
                     type="button"
-                    onClick={() => {
-                      if (window.confirm('Delete this sale? Its details will be retained for review and deducted stock will be restored.')) {
-                        deleteSaleMutation.mutate(selectedSale.id);
-                      }
-                    }}
+                    onClick={() => setShowDeleteModal(true)}
                     disabled={deleteSaleMutation.isPending}
                     className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-semibold disabled:opacity-50"
                   >
@@ -612,6 +610,21 @@ export default function SalesPage() {
           </div>
         </Modal>
       )}
+
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={() => {
+          if (selectedSale) {
+            deleteSaleMutation.mutate(selectedSale.id);
+            setShowDeleteModal(false);
+          }
+        }}
+        title="Delete Sale Record"
+        itemName={selectedSale ? `Sale #${selectedSale.id}` : undefined}
+        message="Are you sure you want to delete this sale? Its details will be retained for review, and any deducted stock will be safely restored."
+        loading={deleteSaleMutation.isPending}
+      />
     </div>
   );
 }

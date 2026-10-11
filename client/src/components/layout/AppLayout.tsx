@@ -40,7 +40,7 @@ export function AppLayout({ requiredRole }: AppLayoutProps) {
         <Header
           onToggleSidebar={() => setMobileSidebarOpen((open) => !open)}
         />
-        <main className="flex-1 overflow-y-auto p-3.5 sm:p-6 scrollbar-thin">
+        <main className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] scrollbar-thin">
           <Outlet />
         </main>
       </div>

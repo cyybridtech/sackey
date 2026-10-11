@@ -21,6 +21,7 @@ interface WorkerSaleData {
   saleType: SaleType;
   items: SaleItemInput[];
   discountAmount?: number;
+  amountPaid?: number;
   notes?: string;
 }
 
@@ -56,6 +57,7 @@ const saleSnapshotToJson = (data: WorkerSaleData): Prisma.InputJsonObject => ({
     unitPrice: item.unitPrice,
   })),
   ...(data.discountAmount !== undefined ? { discountAmount: data.discountAmount } : {}),
+  ...(data.amountPaid !== undefined ? { amountPaid: data.amountPaid } : {}),
   ...(data.notes !== undefined ? { notes: data.notes } : {}),
 });
 
@@ -213,24 +215,66 @@ const replaceSaleItems = async (
 };
 
 /**
- * Create or accumulate a credit ledger entry for CREDIT sales.
+ * Get or create the standard Walk-in Customer for anonymous/cash over-the-counter purchases.
+ */
+const getOrCreateWalkInCustomer = async (tx?: Prisma.TransactionClient) => {
+  const client = tx || prisma;
+  let walkIn = await client.customer.findFirst({
+    where: { customerType: 'WALK_IN', name: 'Walk-in Customer' },
+  });
+  if (!walkIn) {
+    walkIn = await client.customer.create({
+      data: {
+        name: 'Walk-in Customer',
+        customerType: 'WALK_IN',
+        notes: 'Standard walk-in customer for over-the-counter purchases',
+      },
+    });
+  }
+  return walkIn;
+};
+
+/**
+ * Create or accumulate a credit ledger entry for CREDIT sales, supporting upfront partial payment.
  */
 const handleCreditLedger = async (
   tx: Prisma.TransactionClient,
   customerId: number,
   saleId: number,
-  finalTotal: number
+  finalTotal: number,
+  upfrontPayment: number = 0,
+  recordedById?: number
 ): Promise<void> => {
-  await tx.creditLedger.create({
+  const paid = Math.min(Math.max(0, Number(upfrontPayment) || 0), finalTotal);
+  const balance = Math.round((finalTotal - paid) * 100) / 100;
+  const status = balance <= 0
+    ? CreditStatus.PAID
+    : paid > 0
+      ? CreditStatus.PARTIAL
+      : CreditStatus.OUTSTANDING;
+
+  const ledger = await tx.creditLedger.create({
     data: {
       customerId,
       saleId,
       totalAmount: finalTotal,
-      amountPaid: 0,
-      balance: finalTotal,
-      status: CreditStatus.OUTSTANDING,
+      amountPaid: paid,
+      balance,
+      status,
     },
   });
+
+  if (paid > 0 && recordedById) {
+    await tx.payment.create({
+      data: {
+        creditLedgerId: ledger.id,
+        amountPaid: paid,
+        paymentDate: new Date(),
+        notes: 'Initial deposit / partial payment at time of sale',
+        recordedById,
+      },
+    });
+  }
 };
 
 /** Queue a sale-confirmation SMS as part of the sale transaction. */
@@ -280,13 +324,25 @@ export const workerASale = async (
       return;
     }
 
-    const { customerId, paymentMode, saleType, items, notes } = parsed.data;
+    const { customerId, paymentMode, saleType, items, discountAmount, amountPaid, notes } = parsed.data;
     const workerAId = req.user!.userId;
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) {
-      res.status(404).json({ success: false, error: 'Customer not found' });
-      return;
+    let resolvedCustomerId: number;
+    let customer: any;
+    if (!customerId) {
+      if (paymentMode !== PaymentMode.CC) {
+        res.status(400).json({ success: false, error: 'Customer name is required for credit sales' });
+        return;
+      }
+      customer = await getOrCreateWalkInCustomer();
+      resolvedCustomerId = customer.id;
+    } else {
+      resolvedCustomerId = customerId;
+      customer = await prisma.customer.findUnique({ where: { id: resolvedCustomerId } });
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
     }
 
     const productIds = [...new Set(items.map((item) => item.productId))];
@@ -301,21 +357,22 @@ export const workerASale = async (
     }
 
     const saleItems = items.map((item) => ({ ...item, unitPrice: item.unitPrice }));
-    const { originalTotal, discountAmount, finalTotal } = computeTotals(saleItems, products);
+    const { originalTotal, discountAmount: computedDiscount, finalTotal } = computeTotals(saleItems, products);
 
     const workerAData: WorkerSaleData = {
-      customerId,
+      customerId: resolvedCustomerId,
       paymentMode,
       saleType,
       items: saleItems,
-      discountAmount,
+      discountAmount: computedDiscount,
+      amountPaid: amountPaid ? Number(amountPaid) : undefined,
       notes,
     };
 
     // Check for a pending RED sale (Worker B's entry) for the same customer
     const pendingRedSales = await prisma.sale.findMany({
       where: {
-        customerId,
+        customerId: resolvedCustomerId,
         saleType,
         OR: [
           { status: SaleStatus.RED },
@@ -355,7 +412,7 @@ export const workerASale = async (
               workerAData: saleSnapshotToJson(workerAData),
               paymentMode,
               saleType,
-              discountAmount,
+              discountAmount: computedDiscount,
               originalTotal,
               finalTotal,
               notes,
@@ -381,10 +438,10 @@ export const workerASale = async (
           if (!updated) throw new Error('Confirmed sale could not be loaded');
 
           if (paymentMode === PaymentMode.CREDIT) {
-            await handleCreditLedger(tx, customerId, updated.id, finalTotal);
+            await handleCreditLedger(tx, resolvedCustomerId, updated.id, finalTotal, amountPaid || 0, workerAId);
           }
           if (customer.phone) {
-            await queueSaleSms(tx, customerId, updated.id, customer.name, finalTotal, paymentMode);
+            await queueSaleSms(tx, resolvedCustomerId, updated.id, customer.name, finalTotal, paymentMode);
           }
 
           return updated;
@@ -447,20 +504,19 @@ export const workerASale = async (
         });
       }
     } else {
-      // A one-sided credit sale is exposed as flagged until the other worker confirms it.
+      // Stock is NOT deducted on initial BLUE sale; it will only deduct when Worker B confirms
       const initialStatus = initialSaleStatusHelper(true);
       const newSale = await prisma.$transaction(async (tx) => {
-        await deductStock(tx, saleItems);
         return tx.sale.create({
           data: {
-            customerId,
+            customerId: resolvedCustomerId,
             workerAId,
             status: initialStatus,
-            stockDeducted: true,
+            stockDeducted: false,
             paymentMode,
             saleType,
             originalTotal,
-            discountAmount,
+            discountAmount: computedDiscount,
             finalTotal,
             notes,
             workerAData: saleSnapshotToJson(workerAData),
@@ -519,10 +575,22 @@ export const workerBSale = async (
     const { customerId, paymentMode, saleType, items, notes } = parsed.data;
     const workerBId = req.user!.userId;
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-    if (!customer) {
-      res.status(404).json({ success: false, error: 'Customer not found' });
-      return;
+    let resolvedCustomerId: number;
+    let customer: any;
+    if (!customerId) {
+      if (paymentMode !== PaymentMode.CC) {
+        res.status(400).json({ success: false, error: 'Customer name is required for credit sales' });
+        return;
+      }
+      customer = await getOrCreateWalkInCustomer();
+      resolvedCustomerId = customer.id;
+    } else {
+      resolvedCustomerId = customerId;
+      customer = await prisma.customer.findUnique({ where: { id: resolvedCustomerId } });
+      if (!customer) {
+        res.status(404).json({ success: false, error: 'Customer not found' });
+        return;
+      }
     }
 
     const productIds = [...new Set(items.map((item) => item.productId))];
@@ -543,7 +611,7 @@ export const workerBSale = async (
     const { originalTotal, discountAmount, finalTotal } = computeTotals(saleItems, products);
 
     const workerBData: DispatchSaleData = {
-      customerId,
+      customerId: resolvedCustomerId,
       paymentMode,
       saleType,
       items,
@@ -553,7 +621,7 @@ export const workerBSale = async (
     // Check for a pending BLUE sale (Worker A's entry) for the same customer
     const pendingBlueSales = await prisma.sale.findMany({
       where: {
-        customerId,
+        customerId: resolvedCustomerId,
         saleType,
         OR: [
           { status: SaleStatus.BLUE },
@@ -615,12 +683,19 @@ export const workerBSale = async (
           if (!updated) throw new Error('Confirmed sale could not be loaded');
 
           if (blueData.paymentMode === PaymentMode.CREDIT) {
-            await handleCreditLedger(tx, customerId, updated.id, greenFinal);
+            await handleCreditLedger(
+              tx,
+              resolvedCustomerId,
+              updated.id,
+              greenFinal,
+              blueData.amountPaid || 0,
+              pendingBlueSale.workerAId || workerBId
+            );
           }
           if (customer.phone) {
             await queueSaleSms(
               tx,
-              customerId,
+              resolvedCustomerId,
               updated.id,
               customer.name,
               greenFinal,
@@ -687,16 +762,15 @@ export const workerBSale = async (
         });
       }
     } else {
-      // A dispatch-only entry is exposed as flagged until the sales desk confirms it.
+      // Stock is NOT deducted on initial RED dispatch; it will only deduct when sales desk confirms
       const initialStatus = initialSaleStatusHelper(false);
       const newSale = await prisma.$transaction(async (tx) => {
-        await deductStock(tx, saleItems);
         return tx.sale.create({
           data: {
-            customerId,
+            customerId: resolvedCustomerId,
             workerBId,
             status: initialStatus,
-            stockDeducted: true,
+            stockDeducted: false,
             paymentMode,
             saleType,
             originalTotal,
@@ -1024,10 +1098,10 @@ export const deleteSale = async (
       res.status(403).json({ success: false, error: 'You can only delete records you entered' });
       return;
     }
-    if (sale.creditLedger?.payments.length) {
+    if (sale.creditLedger?.payments.length && actor.role !== Role.ADMIN) {
       res.status(409).json({
         success: false,
-        error: 'This credit sale has recorded payments and cannot be deleted. Ask an admin to reconcile the balance.',
+        error: 'This credit sale has recorded payments. Please ask an admin to review and delete.',
       });
       return;
     }
@@ -1061,6 +1135,7 @@ export const deleteSale = async (
         }
       }
       if (sale.creditLedger) {
+        await tx.payment.deleteMany({ where: { creditLedgerId: sale.creditLedger.id } });
         await tx.creditLedger.delete({ where: { id: sale.creditLedger.id } });
       }
       await tx.smsQueue.updateMany({
