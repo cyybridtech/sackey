@@ -235,7 +235,10 @@ const getOrCreateWalkInCustomer = async (tx?: Prisma.TransactionClient) => {
 };
 
 /**
- * Create or accumulate a credit ledger entry for CREDIT sales, supporting upfront partial payment.
+ * Create or accumulate a credit ledger entry for CREDIT sales.
+ * Supports overpayment: if amountPaid > finalTotal, excess clears existing debt oldest-first,
+ * then remaining surplus is added to advanceBalance.
+ * Returns a breakdown for frontend display.
  */
 const handleCreditLedger = async (
   tx: Prisma.TransactionClient,
@@ -244,38 +247,83 @@ const handleCreditLedger = async (
   finalTotal: number,
   upfrontPayment: number = 0,
   recordedById?: number
-): Promise<void> => {
-  const paid = Math.min(Math.max(0, Number(upfrontPayment) || 0), finalTotal);
-  const balance = Math.round((finalTotal - paid) * 100) / 100;
+): Promise<{ towardsSale: number; towardsDebt: number; towardsAdvance: number }> => {
+  // How much of the payment covers this sale
+  const towardsSale = Math.min(Math.max(0, Number(upfrontPayment) || 0), finalTotal);
+  const balance = Math.round((finalTotal - towardsSale) * 100) / 100;
   const status = balance <= 0
     ? CreditStatus.PAID
-    : paid > 0
+    : towardsSale > 0
       ? CreditStatus.PARTIAL
       : CreditStatus.OUTSTANDING;
 
   const ledger = await tx.creditLedger.create({
-    data: {
-      customerId,
-      saleId,
-      totalAmount: finalTotal,
-      amountPaid: paid,
-      balance,
-      status,
-    },
+    data: { customerId, saleId, totalAmount: finalTotal, amountPaid: towardsSale, balance, status },
   });
 
-  if (paid > 0 && recordedById) {
+  if (towardsSale > 0 && recordedById) {
     await tx.payment.create({
       data: {
         creditLedgerId: ledger.id,
-        amountPaid: paid,
+        amountPaid: towardsSale,
         paymentDate: new Date(),
         notes: 'Initial deposit / partial payment at time of sale',
         recordedById,
       },
     });
   }
+
+  // Handle surplus: payment was more than the sale total
+  const surplusCents = Math.round(((Number(upfrontPayment) || 0) - finalTotal) * 100);
+  if (surplusCents <= 0) return { towardsSale, towardsDebt: 0, towardsAdvance: 0 };
+
+  // Pay off existing outstanding ledgers (oldest first), then add remainder as advance
+  const existingLedgers = await tx.creditLedger.findMany({
+    where: { customerId, status: { not: CreditStatus.PAID }, id: { not: ledger.id } },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  let remainingCents = surplusCents;
+  let totalDebtPaidCents = 0;
+
+  for (const el of existingLedgers) {
+    if (remainingCents <= 0) break;
+    const balCents = Math.round(Number(el.balance) * 100);
+    const payCents = Math.min(remainingCents, balCents);
+    remainingCents -= payCents;
+    totalDebtPaidCents += payCents;
+    const newBal = (balCents - payCents) / 100;
+    const newStatus = newBal === 0 ? CreditStatus.PAID : CreditStatus.PARTIAL;
+    await tx.creditLedger.update({
+      where: { id: el.id },
+      data: { amountPaid: { increment: payCents / 100 }, balance: { decrement: payCents / 100 }, status: newStatus },
+    });
+    if (recordedById) {
+      await tx.payment.create({
+        data: {
+          creditLedgerId: el.id,
+          amountPaid: payCents / 100,
+          paymentDate: new Date(),
+          notes: 'Auto-applied from sale overpayment',
+          recordedById,
+        },
+      });
+    }
+  }
+
+  const towardsDebt = totalDebtPaidCents / 100;
+  const towardsAdvance = remainingCents / 100;
+
+  if (towardsAdvance > 0) {
+    await tx.customer.update({
+      where: { id: customerId },
+      data: { advanceBalance: { increment: towardsAdvance } },
+    });
+  }
+
+  return { towardsSale, towardsDebt, towardsAdvance };
 };
+
 
 /** Queue an itemized sale-confirmation receipt SMS as part of the sale transaction. */
 const queueSaleSms = async (

@@ -32,6 +32,7 @@ export interface Customer {
   pendingDebt?: Money;
   totalPotentialDebt?: Money;
   salesCount?: number;
+  advanceBalance?: Money;
   createdAt: string;
   updatedAt?: string;
 }

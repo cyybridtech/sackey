@@ -528,3 +528,134 @@ export const recordAdvanceDeposit = async (
     next(err);
   }
 };
+
+/**
+ * POST /api/customers/:id/payment-only
+ * Standalone payment — no sale. Pays oldest outstanding ledgers first.
+ * Any surplus after clearing all debt is added to advanceBalance.
+ */
+export const recordBulkPayment = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customerId = parseInt(String(req.params.id));
+    const { amount, notes } = req.body;
+    const parsedAmount = Number(amount);
+
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      res.status(400).json({ success: false, error: 'A valid customer ID is required' });
+      return;
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      res.status(400).json({ success: false, error: 'amount must be a positive number' });
+      return;
+    }
+
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: {
+        creditLedger: {
+          where: { status: { not: CreditStatus.PAID } },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    // Work in integer cents to avoid floating-point drift
+    let remainingCents = Math.round(parsedAmount * 100);
+    const ledgerUpdates: { id: number; deducted: number; newBalance: number; newStatus: CreditStatus }[] = [];
+
+    for (const ledger of customer.creditLedger) {
+      if (remainingCents <= 0) break;
+      const balanceCents = Math.round(Number(ledger.balance) * 100);
+      const payCents = Math.min(remainingCents, balanceCents);
+      remainingCents -= payCents;
+      const newBalance = (balanceCents - payCents) / 100;
+      ledgerUpdates.push({
+        id: ledger.id,
+        deducted: payCents / 100,
+        newBalance,
+        newStatus: newBalance === 0 ? CreditStatus.PAID : CreditStatus.PARTIAL,
+      });
+    }
+
+    const advanceToAdd = remainingCents / 100;
+    const totalDebtPaid = parsedAmount - advanceToAdd;
+
+    const result = await prisma.$transaction(async (tx) => {
+      for (const upd of ledgerUpdates) {
+        await tx.creditLedger.update({
+          where: { id: upd.id },
+          data: {
+            amountPaid: { increment: upd.deducted },
+            balance: { decrement: upd.deducted },
+            status: upd.newStatus,
+          },
+        });
+        await tx.payment.create({
+          data: {
+            creditLedgerId: upd.id,
+            amountPaid: upd.deducted,
+            paymentDate: new Date(),
+            recordedById: req.user!.userId,
+            notes: notes || 'Standalone payment',
+          },
+        });
+      }
+
+      const updatedCustomer = await tx.customer.update({
+        where: { id: customerId },
+        data: advanceToAdd > 0 ? { advanceBalance: { increment: advanceToAdd } } : {},
+      });
+
+      if (customer.phone) {
+        let smsMsg = `Dear ${customer.name}, we received GH\u20b5 ${parsedAmount.toFixed(2)}.`;
+        if (totalDebtPaid > 0) smsMsg += ` Debt cleared: GH\u20b5 ${totalDebtPaid.toFixed(2)}.`;
+        if (advanceToAdd > 0) {
+          const newAdv = parseFloat(updatedCustomer.advanceBalance.toString());
+          smsMsg += ` Advance credit: GH\u20b5 ${newAdv.toFixed(2)}.`;
+        }
+        smsMsg += ' Thank you — B.A. Ent';
+        await tx.smsQueue.create({ data: { customerId, message: smsMsg } });
+      }
+
+      return { updatedCustomer, advanceAdded: advanceToAdd };
+    });
+
+    await createAuditLog(
+      req.user!.userId, 'BULK_PAYMENT', 'Customer', customerId,
+      { amount: parsedAmount },
+      { totalDebtPaid, advanceAdded: advanceToAdd, ledgersCount: ledgerUpdates.length },
+      req.ip
+    );
+
+    await createNotification(
+      'PAYMENT_RECEIVED',
+      `GH\u20b5 ${parsedAmount.toFixed(2)} received from ${customer.name}` +
+        (totalDebtPaid > 0 ? ` — debt: GH\u20b5 ${totalDebtPaid.toFixed(2)}` : '') +
+        (advanceToAdd > 0 ? `, advance: GH\u20b5 ${advanceToAdd.toFixed(2)}` : ''),
+      Role.ADMIN, undefined, 'Customer', customerId
+    );
+    emitToAdmin('payment:received', { customerId, amount: parsedAmount, advanceAdded: advanceToAdd });
+
+    res.json({
+      success: true,
+      data: {
+        amountReceived: parsedAmount,
+        totalDebtPaid,
+        advanceAdded: advanceToAdd,
+        newAdvanceBalance: parseFloat(result.updatedCustomer.advanceBalance.toString()),
+        ledgersUpdated: ledgerUpdates.length,
+      },
+      message: 'Payment recorded successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
