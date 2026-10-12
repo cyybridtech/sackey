@@ -100,6 +100,7 @@ export default function MakeSalePage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('CC');
   const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [applyAdvance, setApplyAdvance] = useState(true);
   const [saleType, setSaleType] = useState<SaleType>('WHOLESALE');
   const [notes, setNotes] = useState('');
 
@@ -193,12 +194,14 @@ export default function MakeSalePage() {
   const finalTotal = subtotal;
   const customerDebt = Number(selectedCustomer?.totalDebt ?? 0);
   const customerAdvance = Number(selectedCustomer?.advanceBalance ?? 0);
+  const advanceToApply = (applyAdvance && customerAdvance > 0) ? Math.min(customerAdvance, finalTotal) : 0;
+  const netDue = Math.max(0, Math.round((finalTotal - advanceToApply) * 100) / 100);
 
   // Live breakdown when amount paid > 0 in CREDIT mode
   const breakdown = useMemo((): PayBreakdown | null => {
     if (paymentMode !== 'CREDIT' || amountPaid <= 0) return null;
-    return computeBreakdown(amountPaid, finalTotal, customerDebt);
-  }, [amountPaid, finalTotal, customerDebt, paymentMode]);
+    return computeBreakdown(amountPaid, netDue, customerDebt);
+  }, [amountPaid, netDue, customerDebt, paymentMode]);
 
   // Breakdown for Payment Only mode
   const paymentOnlyBreakdown = useMemo(() => {
@@ -228,6 +231,7 @@ export default function MakeSalePage() {
       items: cart.map((c) => ({ productId: c.productId, quantity: c.quantity, unitPrice: c.unitPrice })),
       discountAmount: discount,
       amountPaid: paymentMode === 'CREDIT' && amountPaid > 0 ? amountPaid : undefined,
+      applyAdvance: applyAdvance && customerAdvance > 0,
       notes,
     }),
     onSuccess: () => {
@@ -368,13 +372,30 @@ export default function MakeSalePage() {
                 </p>
               </div>
             )}
-            {selectedCustomer && customerAdvance > 0 && (
-              <div className="flex items-center gap-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
-                <Wallet className="w-4 h-4 text-blue-600 shrink-0" />
-                <p className="text-xs text-blue-700">
-                  <strong>{selectedCustomer.name}</strong> has an advance credit of <strong>{formatCurrency(customerAdvance)}</strong>
-                </p>
-              </div>
+            {selectedCustomer && customerAdvance > 0 && !isPaymentOnly && (
+              <label className="flex items-center gap-2.5 p-2.5 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100/50 transition">
+                <input
+                  type="checkbox"
+                  checked={applyAdvance}
+                  onChange={(e) => setApplyAdvance(e.target.checked)}
+                  className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                />
+                <div className="flex-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <p className="font-bold text-blue-900 flex items-center gap-1.5">
+                      <Wallet className="w-3.5 h-3.5 text-blue-600" /> Apply Advance Credit
+                    </p>
+                    <span className="font-extrabold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full text-[11px]">
+                      {formatCurrency(customerAdvance)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-700 mt-0.5">
+                    {finalTotal > 0
+                      ? `${formatCurrency(Math.min(customerAdvance, finalTotal))} will be deducted automatically from sale total`
+                      : 'Credit will deduct automatically when products are added'}
+                  </p>
+                </div>
+              </label>
             )}
 
             {/* Sale Type + Payment Mode */}
@@ -689,6 +710,38 @@ export default function MakeSalePage() {
                     <span className="text-blue-700">{formatCurrency(finalTotal)}</span>
                   </div>
 
+                  {/* Advance Credit Applied line */}
+                  {applyAdvance && advanceToApply > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between text-xs text-blue-700 font-semibold bg-blue-50/80 px-2.5 py-1.5 rounded-lg border border-blue-200">
+                        <span className="flex items-center gap-1">
+                          <Wallet className="w-3.5 h-3.5 text-blue-600" /> Less Advance Credit
+                        </span>
+                        <span>−{formatCurrency(advanceToApply)}</span>
+                      </div>
+
+                      <div className="flex justify-between font-extrabold text-sm text-slate-900 pt-1 border-t border-slate-100">
+                        <span>Net Amount Due</span>
+                        <span className={netDue === 0 ? 'text-emerald-600 font-black' : 'text-slate-900'}>
+                          {formatCurrency(netDue)}
+                        </span>
+                      </div>
+
+                      {netDue === 0 ? (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 font-semibold space-y-0.5">
+                          <p>✓ 100% covered by customer's advance balance!</p>
+                          <p className="text-emerald-700 font-normal">
+                            Remaining advance balance after this sale: <strong>{formatCurrency(customerAdvance - finalTotal)}</strong>
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 font-medium">
+                          GH₵ {advanceToApply.toFixed(2)} deducted from advance. Balance left to pay: <strong>{formatCurrency(netDue)}</strong> {paymentMode === 'CC' ? 'in cash.' : '(or recorded as debt).'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Amount Paid field for Credit sales */}
                   {paymentMode === 'CREDIT' && (
                     <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 mt-2">
@@ -708,13 +761,13 @@ export default function MakeSalePage() {
                       {/* Live breakdown / alerts */}
                       {breakdown && amountPaid > 0 && (
                         <>
-                          {amountPaid > finalTotal ? (
+                          {amountPaid > netDue ? (
                             <OverpaymentAlert bd={breakdown} />
                           ) : (
                             <>
-                              {amountPaid >= finalTotal && (
+                              {amountPaid >= netDue && (
                                 <p className="text-[11px] text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
-                                  ✓ Full sale amount covered — no new debt recorded.
+                                  ✓ Full net amount covered — no new debt recorded.
                                 </p>
                               )}
                               <div className="flex justify-between items-center text-xs font-semibold pt-1 border-t border-amber-200/60">

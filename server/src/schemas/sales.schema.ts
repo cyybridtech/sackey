@@ -21,6 +21,7 @@ export const workerASaleSchema = z.object({
   })).min(1),
   discountAmount: z.number().finite().nonnegative().default(0),
   amountPaid: z.number().finite().nonnegative().optional(),
+  applyAdvance: z.boolean().optional().default(false),
 });
 
 export const workerBSaleSchema = z.object({

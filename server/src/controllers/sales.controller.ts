@@ -246,7 +246,8 @@ const handleCreditLedger = async (
   saleId: number,
   finalTotal: number,
   upfrontPayment: number = 0,
-  recordedById?: number
+  recordedById?: number,
+  advanceApplied: number = 0
 ): Promise<{ towardsSale: number; towardsDebt: number; towardsAdvance: number }> => {
   const existing = await tx.creditLedger.findUnique({
     where: { saleId },
@@ -255,17 +256,25 @@ const handleCreditLedger = async (
     return { towardsSale: Number(existing.amountPaid), towardsDebt: 0, towardsAdvance: 0 };
   }
 
-  // How much of the payment covers this sale
-  const towardsSale = Math.min(Math.max(0, Number(upfrontPayment) || 0), finalTotal);
-  const balance = Math.round((finalTotal - towardsSale) * 100) / 100;
+  const netDue = Math.max(0, Math.round((finalTotal - advanceApplied) * 100) / 100);
+  const towardsSale = Math.min(Math.max(0, Number(upfrontPayment) || 0), netDue);
+  const totalCovered = Math.round((advanceApplied + towardsSale) * 100) / 100;
+  const balance = Math.max(0, Math.round((finalTotal - totalCovered) * 100) / 100);
   const status = balance <= 0
     ? CreditStatus.PAID
-    : towardsSale > 0
+    : totalCovered > 0
       ? CreditStatus.PARTIAL
       : CreditStatus.OUTSTANDING;
 
   const ledger = await tx.creditLedger.create({
-    data: { customerId, saleId, totalAmount: finalTotal, amountPaid: towardsSale, balance, status },
+    data: {
+      customerId,
+      saleId,
+      totalAmount: finalTotal,
+      amountPaid: totalCovered,
+      balance,
+      status,
+    },
   });
 
   if (towardsSale > 0 && recordedById) {
@@ -274,14 +283,16 @@ const handleCreditLedger = async (
         creditLedgerId: ledger.id,
         amountPaid: towardsSale,
         paymentDate: new Date(),
-        notes: 'Initial deposit / partial payment at time of sale',
+        notes: advanceApplied > 0
+          ? `Deposit payment (GH₵ ${advanceApplied.toFixed(2)} advance credit also applied)`
+          : 'Initial deposit / partial payment at time of sale',
         recordedById,
       },
     });
   }
 
-  // Handle surplus: payment was more than the sale total
-  const surplusCents = Math.round(((Number(upfrontPayment) || 0) - finalTotal) * 100);
+  // Handle surplus: payment was more than netDue
+  const surplusCents = Math.round(((Number(upfrontPayment) || 0) - netDue) * 100);
   if (surplusCents <= 0) return { towardsSale, towardsDebt: 0, towardsAdvance: 0 };
 
   // Pay off existing outstanding ledgers (oldest first), then add remainder as advance
@@ -341,7 +352,8 @@ const queueSaleSms = async (
   finalTotal: number,
   paymentMode: PaymentMode,
   saleItems?: Array<{ product?: { name?: string | null }; quantity: number; unitPrice?: any; subtotal?: any }> | null,
-  amountPaid?: number
+  amountPaid?: number,
+  advanceApplied: number = 0
 ): Promise<void> => {
   const modeText = paymentMode === PaymentMode.CC ? 'Cash' : 'Credit';
 
@@ -365,8 +377,11 @@ const queueSaleSms = async (
   }
 
   let paymentDetails = `Total: GH₵ ${finalTotal.toFixed(2)} (${modeText})`;
+  if (advanceApplied && advanceApplied > 0) {
+    paymentDetails += `\nAdvance Credit Used: -GH₵ ${advanceApplied.toFixed(2)}`;
+  }
   if (paymentMode === PaymentMode.CREDIT && amountPaid && amountPaid > 0) {
-    const remaining = Math.max(0, finalTotal - amountPaid);
+    const remaining = Math.max(0, finalTotal - (advanceApplied || 0) - amountPaid);
     paymentDetails += `\nDeposit: GH₵ ${amountPaid.toFixed(2)} | Balance: GH₵ ${remaining.toFixed(2)}`;
   }
 
@@ -419,7 +434,7 @@ export const workerASale = async (
       return;
     }
 
-    const { customerId, paymentMode, saleType, items, discountAmount, amountPaid, notes } = parsed.data;
+    const { customerId, paymentMode, saleType, items, discountAmount, amountPaid, notes, applyAdvance } = parsed.data;
     const workerAId = req.user!.userId;
 
     let resolvedCustomerId: number;
@@ -532,8 +547,19 @@ export const workerASale = async (
           });
           if (!updated) throw new Error('Confirmed sale could not be loaded');
 
+          let advanceApplied = 0;
+          if (applyAdvance && customer && Number(customer.advanceBalance) > 0) {
+            advanceApplied = Math.min(Number(customer.advanceBalance), finalTotal);
+            if (advanceApplied > 0) {
+              await tx.customer.update({
+                where: { id: resolvedCustomerId },
+                data: { advanceBalance: { decrement: advanceApplied } },
+              });
+            }
+          }
+
           if (paymentMode === PaymentMode.CREDIT) {
-            await handleCreditLedger(tx, resolvedCustomerId, updated.id, finalTotal, amountPaid || 0, workerAId);
+            await handleCreditLedger(tx, resolvedCustomerId, updated.id, finalTotal, amountPaid || 0, workerAId, advanceApplied);
           }
           if (customer.phone) {
             await queueSaleSms(
@@ -544,7 +570,8 @@ export const workerASale = async (
               finalTotal,
               paymentMode,
               updated.saleItems,
-              amountPaid
+              amountPaid,
+              advanceApplied
             );
           }
 
@@ -629,6 +656,17 @@ export const workerASale = async (
           include: saleInclude,
         });
 
+        let advanceApplied = 0;
+        if (applyAdvance && customer && Number(customer.advanceBalance) > 0) {
+          advanceApplied = Math.min(Number(customer.advanceBalance), finalTotal);
+          if (advanceApplied > 0) {
+            await tx.customer.update({
+              where: { id: resolvedCustomerId },
+              data: { advanceBalance: { decrement: advanceApplied } },
+            });
+          }
+        }
+
         if (paymentMode === PaymentMode.CREDIT) {
           await handleCreditLedger(
             tx,
@@ -636,7 +674,8 @@ export const workerASale = async (
             sale.id,
             finalTotal,
             amountPaid ? Number(amountPaid) : 0,
-            workerAId
+            workerAId,
+            advanceApplied
           );
         }
 

@@ -143,6 +143,8 @@ export default function ConfirmSalePage() {
       void queryClient.invalidateQueries({ queryKey: ['products-catalog'] });
       void queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
       setCart([]);
       setSelectedCustomer(null);
       setCustomerSearch('');
