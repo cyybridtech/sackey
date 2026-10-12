@@ -1377,3 +1377,143 @@ export const verifySale = async (
     next(err);
   }
 };
+
+/**
+ * POST /api/sales/:id/restore
+ * Admin: reverse/restore a deleted sale record back to active state.
+ */
+export const restoreSale = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ success: false, error: 'A valid sale ID is required' });
+      return;
+    }
+
+    const sale = await prisma.sale.findUnique({
+      where: { id },
+      include: {
+        saleItems: { include: { product: true } },
+        creditLedger: true,
+      },
+    });
+
+    if (!sale) {
+      res.status(404).json({ success: false, error: 'Sale record not found' });
+      return;
+    }
+    if (!sale.deletedAt) {
+      res.status(400).json({ success: false, error: 'This sale is already active and not deleted' });
+      return;
+    }
+
+    const restored = await prisma.$transaction(async (tx) => {
+      // Re-deduct stock if the sale had deducted stock before
+      if (sale.stockDeducted) {
+        for (const item of sale.saleItems) {
+          const current = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!current || current.quantity < item.quantity) {
+            throw new Error(`Cannot restore: Insufficient stock for product "${item.product?.name || item.productId}"`);
+          }
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { quantity: { decrement: item.quantity } },
+          });
+        }
+      }
+
+      // Re-create credit ledger if it was a CREDIT sale and no ledger currently exists
+      if (sale.paymentMode === PaymentMode.CREDIT) {
+        const existingLedger = await tx.creditLedger.findUnique({ where: { saleId: id } });
+        if (!existingLedger) {
+          const finalTotalNum = Number(sale.finalTotal);
+          await tx.creditLedger.create({
+            data: {
+              customerId: sale.customerId,
+              saleId: id,
+              totalAmount: finalTotalNum,
+              amountPaid: 0,
+              balance: finalTotalNum,
+              status: CreditStatus.OUTSTANDING,
+              notes: 'Restored credit ledger',
+            },
+          });
+        }
+      }
+
+      // Set deletedAt to null
+      return tx.sale.update({
+        where: { id },
+        data: {
+          deletedAt: null,
+          deletedById: null,
+          deletedByRole: null,
+        },
+        include: saleInclude,
+      });
+    });
+
+    emitSaleChanged(restored);
+    await createAuditLog(req.user!.userId, 'RESTORE_SALE', 'Sale', id, sale, restored, req.ip);
+
+    res.json({
+      success: true,
+      data: restored,
+      message: `Sale #${id} reversed and restored to active records`,
+    });
+  } catch (err: any) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /api/sales/:id/permanent
+ * Admin: permanently delete (purge) a deleted sale from database.
+ */
+export const permanentDeleteSale = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      res.status(400).json({ success: false, error: 'A valid sale ID is required' });
+      return;
+    }
+
+    const sale = await prisma.sale.findUnique({
+      where: { id },
+      include: { creditLedger: true },
+    });
+
+    if (!sale) {
+      res.status(404).json({ success: false, error: 'Sale record not found' });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Delete any payments linked to its credit ledger
+      if (sale.creditLedger) {
+        await tx.payment.deleteMany({ where: { creditLedgerId: sale.creditLedger.id } });
+        await tx.creditLedger.delete({ where: { id: sale.creditLedger.id } });
+      }
+      // Delete saleItems
+      await tx.saleItem.deleteMany({ where: { saleId: id } });
+      // Delete smsQueue entries
+      await tx.smsQueue.deleteMany({ where: { saleId: id } });
+      // Finally delete sale
+      await tx.sale.delete({ where: { id } });
+    });
+
+    await createAuditLog(req.user!.userId, 'PERMANENT_DELETE_SALE', 'Sale', id, sale, null, req.ip);
+    res.json({ success: true, message: `Sale #${id} permanently deleted from records` });
+  } catch (err) {
+    next(err);
+  }
+};
+

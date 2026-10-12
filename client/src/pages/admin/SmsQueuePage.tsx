@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { MessageSquare, Check, X, CheckCheck, Send } from 'lucide-react';
+import { MessageSquare, Check, X, CheckCheck, Send, RotateCcw, Pencil, Trash2 } from 'lucide-react';
 import api from '../../api/axios';
 import { formatDateTime } from '../../lib/utils';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 type Tab = 'PENDING' | 'SENT' | 'REJECTED' | 'ALL';
@@ -19,6 +20,13 @@ export default function SmsQueuePage() {
   const [showTestModal, setShowTestModal] = useState(false);
   const [testPhone, setTestPhone] = useState('');
   const [testMessage, setTestMessage] = useState('Hello! This is a test message from B.A. Ent.');
+
+  // Edit SMS state
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editedMessage, setEditedMessage] = useState('');
+
+  // Delete SMS state
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ['sms-queue'],
@@ -48,6 +56,37 @@ export default function SmsQueuePage() {
       qc.invalidateQueries({ queryKey: ['sms-queue'] });
       qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
     },
+  });
+
+  const reverseMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/sms/reverse/${id}`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'SMS reversed to Pending queue');
+      qc.invalidateQueries({ queryKey: ['sms-queue'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to reverse SMS'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (input: { id: number; message: string }) => api.put(`/sms/${input.id}`, { message: input.message }),
+    onSuccess: () => {
+      toast.success('SMS message updated');
+      setEditingItem(null);
+      qc.invalidateQueries({ queryKey: ['sms-queue'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to update SMS'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/sms/${id}`),
+    onSuccess: () => {
+      toast.success('SMS message deleted from queue');
+      setDeletingId(null);
+      qc.invalidateQueries({ queryKey: ['sms-queue'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete SMS'),
   });
 
   const bulkApproveMutation = useMutation({
@@ -234,32 +273,119 @@ export default function SmsQueuePage() {
                       </span>
                     )}
                   </div>
-                  {item.status === 'PENDING' && (
-                    <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {item.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => approveMutation.mutate(item.id)}
+                          disabled={approveMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition disabled:opacity-50"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Approve & Send</span>
+                        </button>
+                        <button
+                          onClick={() => rejectMutation.mutate(item.id)}
+                          disabled={rejectMutation.isPending}
+                          className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          <span>Reject</span>
+                        </button>
+                      </>
+                    )}
+
+                    {item.status === 'REJECTED' && (
                       <button
-                        onClick={() => approveMutation.mutate(item.id)}
-                        disabled={approveMutation.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition disabled:opacity-50"
+                        onClick={() => reverseMutation.mutate(item.id)}
+                        disabled={reverseMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold hover:bg-amber-600 transition disabled:opacity-50"
                       >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Approve & Send</span>
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Reverse to Pending</span>
                       </button>
-                      <button
-                        onClick={() => rejectMutation.mutate(item.id)}
-                        disabled={rejectMutation.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-semibold hover:bg-red-50 transition"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                        <span>Reject</span>
-                      </button>
-                    </div>
-                  )}
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setEditingItem(item);
+                        setEditedMessage(item.message);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 border border-slate-200 text-slate-700 rounded-lg text-xs font-medium hover:bg-slate-50 transition"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+
+                    <button
+                      onClick={() => setDeletingId(item.id)}
+                      className="flex items-center gap-1 px-2.5 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 transition"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Edit SMS Modal */}
+      {editingItem && (
+        <Modal
+          title="Edit SMS Message"
+          onClose={() => setEditingItem(null)}
+          size="md"
+        >
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500">
+              Recipient: <strong className="text-slate-800">{editingItem.customer?.name}</strong> ({editingItem.customer?.phone || 'No phone'})
+            </p>
+            <div>
+              <label className="text-xs font-bold text-slate-700 block mb-1">
+                Message Content
+              </label>
+              <textarea
+                value={editedMessage}
+                onChange={(e) => setEditedMessage(e.target.value)}
+                rows={5}
+                className="w-full border border-slate-200 rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={updateMutation.isPending || !editedMessage.trim()}
+                onClick={() => updateMutation.mutate({ id: editingItem.id, message: editedMessage })}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete SMS Confirmation */}
+      <DeleteConfirmModal
+        isOpen={deletingId !== null}
+        onClose={() => setDeletingId(null)}
+        onConfirm={() => {
+          if (deletingId !== null) deleteMutation.mutate(deletingId);
+        }}
+        title="Delete SMS from Queue"
+        message="Are you sure you want to permanently delete this SMS notification from the queue?"
+        loading={deleteMutation.isPending}
+      />
 
       {/* Send Test SMS Modal */}
       {showTestModal && (

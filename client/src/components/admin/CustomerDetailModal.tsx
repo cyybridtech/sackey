@@ -6,7 +6,7 @@ import Modal from '../ui/Modal';
 import Badge from '../ui/Badge';
 import Spinner from '../ui/Spinner';
 import toast from 'react-hot-toast';
-import { AlertTriangle, CreditCard, ShoppingBag, DollarSign } from 'lucide-react';
+import { AlertTriangle, CreditCard, ShoppingBag, DollarSign, BookOpen, Plus } from 'lucide-react';
 
 type Tab = 'overview' | 'purchases' | 'credits' | 'payments';
 
@@ -14,6 +14,9 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('overview');
   const [payForm, setPayForm] = useState<{ creditId: number; amount: string; notes: string } | null>(null);
+  const [showBookDebtForm, setShowBookDebtForm] = useState(false);
+  const [bookDebtAmount, setBookDebtAmount] = useState('');
+  const [bookDebtNotes, setBookDebtNotes] = useState('');
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['customer-detail', customer.id],
@@ -35,8 +38,27 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
       setPayForm(null);
       qc.invalidateQueries({ queryKey: ['customer-detail', customer.id] });
       qc.invalidateQueries({ queryKey: ['credits'] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed'),
+  });
+
+  const openingDebtMutation = useMutation({
+    mutationFn: () =>
+      api.post(`/customers/${customer.id}/opening-debt`, {
+        amount: parseFloat(bookDebtAmount),
+        notes: bookDebtNotes.trim() || undefined,
+      }),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Paper book debt recorded successfully');
+      setShowBookDebtForm(false);
+      setBookDebtAmount('');
+      setBookDebtNotes('');
+      qc.invalidateQueries({ queryKey: ['customer-detail', customer.id] });
+      qc.invalidateQueries({ queryKey: ['credits'] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to record paper book debt'),
   });
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
@@ -204,9 +226,75 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
 
               {/* Confirmed Credit Ledger */}
               <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                  Confirmed Credit Ledger
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                    Confirmed Credit Ledger
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowBookDebtForm(!showBookDebtForm)}
+                    className="flex items-center gap-1 text-xs font-semibold text-red-700 hover:text-red-800 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg transition"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Record Book Debt</span>
+                  </button>
+                </div>
+
+                {/* Inline Record Book Debt Form */}
+                {showBookDebtForm && (
+                  <div className="border border-red-200 bg-red-50/70 rounded-xl p-4 space-y-3">
+                    <h5 className="font-bold text-red-900 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                      <BookOpen className="w-4 h-4 text-red-700" />
+                      Add Existing Debt from Paper Book
+                    </h5>
+                    <p className="text-xs text-red-800 leading-relaxed">
+                      Migrate opening or historical debt balances written in previous books directly into this customer's account.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Debt Amount (GH₵) *</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required
+                          placeholder="e.g. 1500.00"
+                          value={bookDebtAmount}
+                          onChange={(e) => setBookDebtAmount(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Notes / Book Reference</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Balance from Old Green Book page 42"
+                          value={bookDebtNotes}
+                          onChange={(e) => setBookDebtNotes(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 justify-end pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowBookDebtForm(false)}
+                        className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={openingDebtMutation.isPending || !bookDebtAmount || parseFloat(bookDebtAmount) <= 0}
+                        onClick={() => openingDebtMutation.mutate()}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition disabled:opacity-50"
+                      >
+                        {openingDebtMutation.isPending ? 'Saving...' : 'Confirm Book Debt'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {!profile?.creditLedger?.length ? (
                   <p className="text-slate-400 text-xs text-center py-4">No confirmed credit ledgers.</p>
                 ) : (
@@ -214,8 +302,15 @@ export default function CustomerDetailModal({ customer, onClose }: { customer: a
                     <div key={cl.id} className="border border-slate-200 rounded-xl p-4 bg-white">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <p className="text-xs text-slate-400">Sale #{cl.saleId} · {formatDate(cl.createdAt)}</p>
-                          <p className="font-bold text-slate-800 text-sm">Invoice Amount: {formatCurrency(parseFloat(cl.totalAmount))}</p>
+                          <p className="text-xs text-slate-400">
+                            {cl.saleId ? `Sale #${cl.saleId}` : '📖 Paper Book Opening Balance'} · {formatDate(cl.createdAt)}
+                          </p>
+                          <p className="font-bold text-slate-800 text-sm">
+                            {cl.saleId ? 'Invoice Amount:' : 'Opening Debt:'} {formatCurrency(parseFloat(cl.totalAmount))}
+                          </p>
+                          {cl.notes && (
+                            <p className="text-xs text-slate-600 italic mt-0.5">Note: {cl.notes}</p>
+                          )}
                         </div>
                         <Badge variant={cl.status === 'OUTSTANDING' ? 'red' : cl.status === 'PARTIAL' ? 'orange' : 'green'}>{cl.status}</Badge>
                       </div>

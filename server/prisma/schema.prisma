@@ -49,6 +49,12 @@ enum CustomerType {
   REGISTERED
 }
 
+enum RestockStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id                 Int      @id @default(autoincrement())
   name               String
@@ -60,12 +66,14 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  salesAsWorkerA Sale[]         @relation("WorkerASales")
-  salesAsWorkerB Sale[]         @relation("WorkerBSales")
-  deletedSales   Sale[]         @relation("SaleDeletions")
-  payments       Payment[]
-  auditLogs      AuditLog[]
-  notifications  Notification[]
+  salesAsWorkerA   Sale[]           @relation("WorkerASales")
+  salesAsWorkerB   Sale[]           @relation("WorkerBSales")
+  deletedSales     Sale[]           @relation("SaleDeletions")
+  payments         Payment[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  restockRequests  RestockRequest[] @relation("WorkerRestocks")
+  reviewedRestocks RestockRequest[] @relation("AdminRestockReviews")
 
   @@map("users")
 }
@@ -85,7 +93,8 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  saleItems SaleItem[]
+  saleItems       SaleItem[]
+  restockRequests RestockRequest[]
 
   @@map("products")
 }
@@ -163,17 +172,18 @@ model SaleItem {
 model CreditLedger {
   id          Int          @id @default(autoincrement())
   customerId  Int          @map("customer_id")
-  saleId      Int          @unique @map("sale_id")
+  saleId      Int?         @unique @map("sale_id")
   totalAmount Decimal      @map("total_amount") @db.Decimal(10, 2)
   amountPaid  Decimal      @default(0) @map("amount_paid") @db.Decimal(10, 2)
   balance     Decimal      @db.Decimal(10, 2)
   status      CreditStatus @default(OUTSTANDING)
+  notes       String?      @db.Text
   dueDate     DateTime?    @map("due_date")
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
   customer Customer  @relation(fields: [customerId], references: [id])
-  sale     Sale      @relation(fields: [saleId], references: [id])
+  sale     Sale?     @relation(fields: [saleId], references: [id])
   payments Payment[]
 
   @@map("credit_ledger")
@@ -240,4 +250,22 @@ model AuditLog {
   user User @relation(fields: [userId], references: [id])
 
   @@map("audit_log")
+}
+
+model RestockRequest {
+  id           Int           @id @default(autoincrement())
+  productId    Int           @map("product_id")
+  workerId     Int           @map("worker_id")
+  quantity     Int
+  notes        String?       @db.Text
+  status       RestockStatus @default(PENDING)
+  reviewedById Int?          @map("reviewed_by_id")
+  reviewedAt   DateTime?     @map("reviewed_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  product    Product @relation(fields: [productId], references: [id])
+  worker     User    @relation("WorkerRestocks", fields: [workerId], references: [id])
+  reviewedBy User?   @relation("AdminRestockReviews", fields: [reviewedById], references: [id])
+
+  @@map("restock_requests")
 }

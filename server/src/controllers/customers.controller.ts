@@ -46,6 +46,7 @@ export const getCustomers = async (
           where: {
             paymentMode: 'CREDIT',
             status: { in: ['BLUE', 'RED', 'FLAGGED'] },
+            deletedAt: null,
           },
           select: { finalTotal: true, status: true },
         },
@@ -126,7 +127,7 @@ export const getCustomerById = async (
       .reduce((sum, l) => sum + parseFloat(l.balance.toString()), 0);
 
     const pendingCreditSales = customer.sales.filter(
-      (s) => s.paymentMode === 'CREDIT' && s.status !== 'GREEN'
+      (s) => s.paymentMode === 'CREDIT' && s.status !== 'GREEN' && !s.deletedAt
     );
     const pendingCreditDebt = pendingCreditSales.reduce(
       (sum, s) => sum + parseFloat(s.finalTotal.toString()),
@@ -162,16 +163,38 @@ export const createCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { name, phone, email, address, customerType, notes } = req.body;
+    const { name, phone, email, address, customerType, notes, initialDebt } = req.body;
 
     if (!name) {
       res.status(400).json({ success: false, error: 'Customer name is required' });
       return;
     }
 
-    const customer = await prisma.customer.create({
-      data: { name, phone, email, address, customerType, notes },
-    });
+    const parsedDebt = parseFloat(String(initialDebt || 0));
+    let customer: any;
+
+    if (parsedDebt && parsedDebt > 0) {
+      customer = await prisma.$transaction(async (tx) => {
+        const c = await tx.customer.create({
+          data: { name, phone, email, address, customerType, notes },
+        });
+        await tx.creditLedger.create({
+          data: {
+            customerId: c.id,
+            totalAmount: parsedDebt,
+            amountPaid: 0,
+            balance: parsedDebt,
+            status: CreditStatus.OUTSTANDING,
+            notes: 'Historical outstanding debt entered from paper book records',
+          },
+        });
+        return c;
+      });
+    } else {
+      customer = await prisma.customer.create({
+        data: { name, phone, email, address, customerType, notes },
+      });
+    }
 
     await createAuditLog(
       req.user!.userId,
@@ -187,6 +210,62 @@ export const createCustomer = async (
       success: true,
       data: customer,
       message: 'Customer created successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/customers/:id/opening-debt
+ * Record historical debt from paper book records for an existing customer.
+ */
+export const recordOpeningDebt = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customerId = parseInt(String(req.params.id), 10);
+    const { amount, notes } = req.body;
+
+    const parsedAmount = parseFloat(String(amount || 0));
+    if (!parsedAmount || parsedAmount <= 0) {
+      res.status(400).json({ success: false, error: 'A valid positive debt amount is required' });
+      return;
+    }
+
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    const ledger = await prisma.creditLedger.create({
+      data: {
+        customer: { connect: { id: customerId } },
+        totalAmount: parsedAmount,
+        amountPaid: 0,
+        balance: parsedAmount,
+        status: CreditStatus.OUTSTANDING,
+        notes: notes || 'Historical outstanding balance migrated from paper book records',
+      },
+    });
+
+    await createAuditLog(
+      req.user!.userId,
+      'RECORD_BOOK_DEBT',
+      'Customer',
+      customerId,
+      null,
+      { amount: parsedAmount, notes },
+      req.ip
+    );
+
+    res.status(201).json({
+      success: true,
+      data: ledger,
+      message: `Historical debt of GH₵ ${parsedAmount.toFixed(2)} recorded successfully`,
     });
   } catch (err) {
     next(err);

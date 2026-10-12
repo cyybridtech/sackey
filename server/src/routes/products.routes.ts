@@ -7,6 +7,9 @@ import {
   deleteProduct,
   restockProduct,
   getCategories,
+  getRestockRequests,
+  approveRestockRequest,
+  rejectRestockRequest,
 } from '../controllers/products.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/roles.middleware';
@@ -19,6 +22,10 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/categories', getCategories);
+router.get('/restock-requests', getRestockRequests);
+router.post('/restock-requests/:id/approve', requireRole(Role.ADMIN), approveRestockRequest);
+router.post('/restock-requests/:id/reject', requireRole(Role.ADMIN), rejectRestockRequest);
+
 router.get('/', getProducts);
 router.get('/:id', getProductById);
 

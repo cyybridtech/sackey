@@ -9,6 +9,7 @@ import {
   recordPayment,
   recordAdvanceDeposit,
   recordBulkPayment,
+  recordOpeningDebt,
 } from '../controllers/customers.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/roles.middleware';
@@ -28,5 +29,6 @@ router.delete('/:id', requireRole(Role.ADMIN), deleteCustomer);
 router.post('/:id/payment', requireRole(Role.ADMIN, Role.WORKER_A), recordPayment);
 router.post('/:id/payment-only', requireRole(Role.ADMIN, Role.WORKER_A), recordBulkPayment);
 router.post('/:id/advance', requireRole(Role.ADMIN, Role.WORKER_A), recordAdvanceDeposit);
+router.post('/:id/opening-debt', requireRole(Role.ADMIN, Role.WORKER_A), recordOpeningDebt);
 
 export default router;

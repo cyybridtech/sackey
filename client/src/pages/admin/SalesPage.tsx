@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Eye, CheckCircle, Filter, AlertTriangle, ShieldCheck, HelpCircle, Pencil, Trash2 } from 'lucide-react';
+import { Eye, CheckCircle, Filter, AlertTriangle, ShieldCheck, HelpCircle, Pencil, Trash2, RotateCcw, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
 import api from '../../api/axios';
-import { formatCurrency, formatDateTime } from '../../lib/utils';
+import { formatCurrency, formatDateTime, formatDate } from '../../lib/utils';
 import Badge from '../../components/ui/Badge';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
@@ -22,8 +22,10 @@ export default function SalesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedSale, setSelectedSale] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPermanentDeleteModal, setShowPermanentDeleteModal] = useState(false);
   const [editingSale, setEditingSale] = useState(false);
   const [saleEditForm, setSaleEditForm] = useState({ notes: '', discountAmount: '', saleType: 'WHOLESALE' });
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   
   const statusFromUrl = searchParams.get('status') || '';
   const deletedOnly = searchParams.get('deleted') === 'true';
@@ -73,6 +75,7 @@ export default function SalesPage() {
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to update sale'),
   });
+
   const deleteSaleMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/sales/${id}`),
     onSuccess: () => {
@@ -86,6 +89,35 @@ export default function SalesPage() {
       setEditingSale(false);
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete sale'),
+  });
+
+  const restoreSaleMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/sales/${id}/restore`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Sale restored successfully to active records');
+      void qc.invalidateQueries({ queryKey: ['sales'] });
+      void qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['credits'] });
+      void qc.invalidateQueries({ queryKey: ['credits-summary'] });
+      void qc.invalidateQueries({ queryKey: ['products'] });
+      setSelectedSale(null);
+      setEditingSale(false);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to restore sale'),
+  });
+
+  const permanentDeleteMutation = useMutation({
+    mutationFn: (id: number) => api.delete(`/sales/${id}/permanent`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Sale record permanently purged from database');
+      void qc.invalidateQueries({ queryKey: ['sales'] });
+      void qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['credits'] });
+      void qc.invalidateQueries({ queryKey: ['credits-summary'] });
+      setSelectedSale(null);
+      setShowPermanentDeleteModal(false);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to permanently delete sale'),
   });
 
   const beginSaleEdit = () => {
@@ -185,6 +217,103 @@ export default function SalesPage() {
           <div className="text-center py-16 text-slate-400">
             <HelpCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
             <p>No sales matching the selected filters.</p>
+          </div>
+        ) : deletedOnly ? (
+          /* DELETED RECORDS GROUPED BY DATE VIEW */
+          <div className="p-4 space-y-4">
+            {(() => {
+              const groups: Record<string, any[]> = {};
+              sales.forEach((s: any) => {
+                const dateKey = s.deletedAt ? s.deletedAt.split('T')[0] : s.saleDate.split('T')[0];
+                if (!groups[dateKey]) groups[dateKey] = [];
+                groups[dateKey].push(s);
+              });
+              const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+              return sortedDates.map((dateKey) => {
+                const groupSales = groups[dateKey];
+                const isExpanded = expandedDates[dateKey] !== false;
+                const groupTotal = groupSales.reduce((acc, s) => acc + (parseFloat(s.finalTotal) || 0), 0);
+
+                return (
+                  <div key={dateKey} className="border border-red-200 rounded-xl overflow-hidden bg-red-50/20">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedDates((prev) => ({ ...prev, [dateKey]: !isExpanded }))}
+                      className="w-full flex items-center justify-between p-3.5 bg-red-100/50 hover:bg-red-100/80 transition text-left text-red-950 font-semibold"
+                    >
+                      <div className="flex items-center gap-2">
+                        {isExpanded ? <ChevronDown className="w-4 h-4 text-red-700" /> : <ChevronRight className="w-4 h-4 text-red-700" />}
+                        <Calendar className="w-4 h-4 text-red-700" />
+                        <span className="text-sm font-bold">{formatDate(dateKey)}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-200 text-red-800 font-medium">
+                          {groupSales.length} deleted record{groupSales.length === 1 ? '' : 's'}
+                        </span>
+                      </div>
+                      <div className="text-right text-xs">
+                        <span className="text-red-700 font-mono font-bold">{formatCurrency(groupTotal)}</span>
+                      </div>
+                    </button>
+
+                    {isExpanded && (
+                      <div className="divide-y divide-red-100 bg-white">
+                        {groupSales.map((sale: any) => (
+                          <div
+                            key={sale.id}
+                            className="p-3.5 hover:bg-red-50/30 flex flex-col md:flex-row md:items-center justify-between gap-3 transition"
+                          >
+                            <div
+                              onClick={() => setSelectedSale(sale)}
+                              className="flex-1 cursor-pointer space-y-1"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-slate-800 text-sm">#{sale.id}</span>
+                                <Badge variant="red">Deleted</Badge>
+                                <span className="text-xs text-slate-500">
+                                  by {sale.deletedBy?.name || 'Staff'} ({sale.deletedByRole || 'Staff'}) at {formatDateTime(sale.deletedAt)}
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-700">
+                                <strong className="text-slate-900">{sale.customer?.name}</strong> • {sale.customer?.phone || 'No phone'} • Total: <strong className="text-slate-900">{formatCurrency(parseFloat(sale.finalTotal))}</strong>
+                              </div>
+                              <p className="text-[11px] text-slate-500 line-clamp-1">
+                                Items: {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ')}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedSale(sale); setEditingSale(false); }}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-medium flex items-center gap-1 border border-blue-200"
+                              >
+                                <Eye className="w-3.5 h-3.5" /> View
+                              </button>
+                              <button
+                                type="button"
+                                disabled={restoreSaleMutation.isPending}
+                                onClick={() => restoreSaleMutation.mutate(sale.id)}
+                                className="px-2.5 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" /> Restore
+                              </button>
+                              <button
+                                type="button"
+                                disabled={permanentDeleteMutation.isPending}
+                                onClick={() => { setSelectedSale(sale); setShowPermanentDeleteModal(true); }}
+                                className="px-2.5 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Hard Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         ) : (
           <>
@@ -452,34 +581,55 @@ export default function SalesPage() {
                 )}
                 <p className="font-bold text-lg"><span className="text-slate-500 font-normal">Final Total:</span> {formatCurrency(parseFloat(selectedSale.finalTotal))}</p>
               </div>
-              <div className="flex gap-2">
-                {!editingSale && !selectedSale.deletedAt && (
-                  <button
-                    onClick={beginSaleEdit}
-                    className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-semibold"
-                  >
-                    <Pencil className="w-4 h-4" /> Edit
-                  </button>
-                )}
-                {!selectedSale.deletedAt && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDeleteModal(true)}
-                    disabled={deleteSaleMutation.isPending}
-                    className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-semibold disabled:opacity-50"
-                  >
-                    <Trash2 className="w-4 h-4" /> Delete
-                  </button>
-                )}
-                {selectedSale.status === 'GREEN' && !selectedSale.adminVerified && (
-                  <button
-                    onClick={() => verifyMutation.mutate(selectedSale.id)}
-                    disabled={verifyMutation.isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Verify Sale
-                  </button>
+              <div className="flex flex-wrap gap-2">
+                {selectedSale.deletedAt ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => restoreSaleMutation.mutate(selectedSale.id)}
+                      disabled={restoreSaleMutation.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition text-sm font-semibold disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-4 h-4" /> Restore Sale
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPermanentDeleteModal(true)}
+                      disabled={permanentDeleteMutation.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-semibold disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Permanently
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {!editingSale && (
+                      <button
+                        onClick={beginSaleEdit}
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-semibold"
+                      >
+                        <Pencil className="w-4 h-4" /> Edit
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteModal(true)}
+                      disabled={deleteSaleMutation.isPending}
+                      className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition text-sm font-semibold disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete
+                    </button>
+                    {selectedSale.status === 'GREEN' && !selectedSale.adminVerified && (
+                      <button
+                        onClick={() => verifyMutation.mutate(selectedSale.id)}
+                        disabled={verifyMutation.isPending}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Verify Sale
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -624,6 +774,20 @@ export default function SalesPage() {
         itemName={selectedSale ? `Sale #${selectedSale.id}` : undefined}
         message="Are you sure you want to delete this sale? Its details will be retained for review, and any deducted stock will be safely restored."
         loading={deleteSaleMutation.isPending}
+      />
+
+      <DeleteConfirmModal
+        isOpen={showPermanentDeleteModal}
+        onClose={() => setShowPermanentDeleteModal(false)}
+        onConfirm={() => {
+          if (selectedSale) {
+            permanentDeleteMutation.mutate(selectedSale.id);
+          }
+        }}
+        title="Permanently Delete Sale"
+        itemName={selectedSale ? `Sale #${selectedSale.id}` : undefined}
+        message="DANGER: This action cannot be undone. This sale, all its line items, ledger entries, and audit references will be permanently wiped from the database."
+        loading={permanentDeleteMutation.isPending}
       />
     </div>
   );

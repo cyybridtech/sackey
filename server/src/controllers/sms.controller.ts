@@ -236,3 +236,105 @@ export const sendTestSms = async (
     next(err);
   }
 };
+
+/**
+ * PUT /api/sms/:id
+ * Edit the text content of an SMS in the queue.
+ */
+export const updateSms = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+    const { message } = req.body;
+
+    if (!message || typeof message !== 'string' || !message.trim()) {
+      res.status(400).json({ success: false, error: 'A valid message string is required' });
+      return;
+    }
+
+    const existing = await prisma.smsQueue.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'SMS entry not found' });
+      return;
+    }
+
+    const updated = await prisma.smsQueue.update({
+      where: { id },
+      data: { message: message.trim() },
+      include: {
+        customer: { select: { id: true, name: true, phone: true } },
+        sale: { select: { id: true, saleDate: true, finalTotal: true } },
+      },
+    });
+
+    res.json({ success: true, data: updated, message: 'SMS message updated successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/sms/reverse/:id
+ * Reverse a rejected or sent SMS back to PENDING status for re-review and sending.
+ */
+export const reverseSms = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+
+    const existing = await prisma.smsQueue.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'SMS entry not found' });
+      return;
+    }
+
+    const updated = await prisma.smsQueue.update({
+      where: { id },
+      data: {
+        status: SmsStatus.PENDING,
+        adminApprovedAt: null,
+        sentAt: null,
+      },
+      include: {
+        customer: { select: { id: true, name: true, phone: true } },
+        sale: { select: { id: true, saleDate: true, finalTotal: true } },
+      },
+    });
+
+    res.json({ success: true, data: updated, message: 'SMS message returned to Pending Approval' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /api/sms/:id
+ * Permanently remove an SMS message from the queue.
+ */
+export const deleteSms = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+
+    const existing = await prisma.smsQueue.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ success: false, error: 'SMS entry not found' });
+      return;
+    }
+
+    await prisma.smsQueue.delete({ where: { id } });
+    res.json({ success: true, message: 'SMS message removed from queue' });
+  } catch (err) {
+    next(err);
+  }
+};
+

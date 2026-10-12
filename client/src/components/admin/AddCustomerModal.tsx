@@ -20,12 +20,26 @@ export default function AddCustomerModal({
     address: customer?.address || '',
     customerType: customer?.customerType || 'REGISTERED',
     notes: customer?.notes || '',
+    initialDebt: '',
   });
 
   const mutation = useMutation({
-    mutationFn: () => customer
-      ? api.put(`/customers/${customer.id}`, form)
-      : api.post('/customers', form),
+    mutationFn: () => {
+      const payload: any = {
+        name: form.name,
+        phone: form.phone,
+        email: form.email,
+        address: form.address,
+        customerType: form.customerType,
+        notes: form.notes,
+      };
+      if (!customer && form.initialDebt && parseFloat(form.initialDebt) > 0) {
+        payload.initialDebt = parseFloat(form.initialDebt);
+      }
+      return customer
+        ? api.put(`/customers/${customer.id}`, payload)
+        : api.post('/customers', payload);
+    },
     onSuccess: () => {
       toast.success(customer ? 'Customer updated successfully' : 'Customer added successfully');
       void qc.invalidateQueries({ queryKey: ['customers'] });
@@ -55,6 +69,28 @@ export default function AddCustomerModal({
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
         </div>
+
+        {/* Historical Paper Book Debt field for new customers */}
+        {!customer && (
+          <div className="p-3 bg-red-50/60 border border-red-200 rounded-xl space-y-1">
+            <label className="block text-xs font-bold text-red-900">
+              Opening Debt Balance from Paper Book (GH₵)
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g. 500.00 (leave 0 or empty if no prior debt)"
+              value={form.initialDebt}
+              onChange={(e) => setForm(f => ({ ...f, initialDebt: e.target.value }))}
+              className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 bg-white"
+            />
+            <p className="text-[11px] text-red-700">
+              Use this to migrate existing customer balances written in previous record books into the app.
+            </p>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Customer Type</label>
           <select value={form.customerType} onChange={(e) => setForm(f => ({ ...f, customerType: e.target.value as Customer['customerType'] }))}

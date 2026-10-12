@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit, Trash2, RefreshCw, Package, Search, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, Edit, Trash2, RefreshCw, Package, Search, Image as ImageIcon, X, Check, ClipboardCheck, Clock } from 'lucide-react';
 import api from '../../api/axios';
-import { formatCurrency, getProductImageUrl, compressImageFile } from '../../lib/utils';
+import { formatCurrency, formatDateTime, getProductImageUrl, compressImageFile } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
 import Modal from '../../components/ui/Modal';
+import Badge from '../../components/ui/Badge';
 import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
@@ -153,7 +154,7 @@ function ProductFormModal({ product, onClose }: { product?: any; onClose: () => 
   );
 }
 
-function RestockModal({ product, onClose }: { product: any; onClose: () => void }) {
+function RestockModal({ product, workerMode = false, onClose }: { product: any; workerMode?: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [qty, setQty] = useState('');
   const [notes, setNotes] = useState('');
@@ -163,15 +164,20 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post(`/products/${product.id}/restock`, {
+      const res = await api.post(`/products/${product.id}/restock`, {
         quantity: parseInt(qty),
         notes: notes.trim() || undefined,
       });
-      toast.success(`Restocked ${qty} units for ${product.name}`);
+      if (res.data?.pendingApproval) {
+        toast.success(res.data?.message || `Restock request of ${qty} units submitted to Admin for verification.`);
+      } else {
+        toast.success(res.data?.message || `Restocked ${qty} units for ${product.name}`);
+      }
       qc.invalidateQueries({ queryKey: ['products'] });
       qc.invalidateQueries({ queryKey: ['products-catalog'] });
       qc.invalidateQueries({ queryKey: ['products-catalog-b'] });
       qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['restock-requests'] });
       onClose();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Restock failed');
@@ -183,6 +189,13 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
   return (
     <Modal title={`Restock Inventory: ${product.name}`} onClose={onClose}>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Notice for Worker Mode */}
+        {workerMode && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 leading-relaxed">
+            ℹ️ <strong>Admin Review Required:</strong> When you submit this restock, the Admin receives an instant notification to review and confirm the goods before they are added to valid inventory.
+          </div>
+        )}
+
         {/* Product Details */}
         <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
           <div className="flex justify-between">
@@ -214,7 +227,7 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
           </label>
           <textarea
             rows={2}
-            placeholder="e.g., New stock shipment received from supplier"
+            placeholder="e.g., Supplier package received; 5 boxes added"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
@@ -230,7 +243,7 @@ function RestockModal({ product, onClose }: { product: any; onClose: () => void 
             disabled={loading}
             className="flex-1 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-60"
           >
-            {loading ? 'Restocking...' : 'Confirm Restock'}
+            {loading ? 'Submitting...' : workerMode ? 'Submit for Review' : 'Confirm Restock'}
           </button>
         </div>
       </form>
@@ -246,6 +259,7 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
   const [editProduct, setEditProduct] = useState<any>(null);
   const [restockProduct, setRestockProduct] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [showRestockModal, setShowRestockModal] = useState(false);
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ['products', search, category],
@@ -263,6 +277,39 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
     },
   });
 
+  const { data: restockRequests = [] } = useQuery({
+    queryKey: ['restock-requests'],
+    queryFn: async () => {
+      const res = await api.get('/products/restock-requests');
+      return res.data.data;
+    },
+    refetchInterval: 10000,
+  });
+
+  const pendingRestockCount = restockRequests.filter((r: any) => r.status === 'PENDING').length;
+
+  const approveRestockMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/products/restock-requests/${id}/approve`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Restock confirmed and applied to inventory!');
+      qc.invalidateQueries({ queryKey: ['restock-requests'] });
+      qc.invalidateQueries({ queryKey: ['products'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog'] });
+      qc.invalidateQueries({ queryKey: ['products-catalog-b'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to approve restock'),
+  });
+
+  const rejectRestockMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/products/restock-requests/${id}/reject`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Restock request rejected');
+      qc.invalidateQueries({ queryKey: ['restock-requests'] });
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to reject restock'),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.delete(`/products/${id}`),
     onSuccess: () => {
@@ -277,15 +324,37 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Products</h1>
-          <p className="text-slate-500 text-sm">Manage your product inventory</p>
+          <p className="text-slate-500 text-sm">
+            {workerMode
+              ? 'View inventory and submit stock replenishment requests'
+              : 'Manage products, inventory levels, and review worker restocks'}
+          </p>
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium">
-          <Plus className="w-4 h-4" /> Add Product
-        </button>
+        <div className="flex items-center gap-2">
+          {!workerMode && (
+            <button
+              onClick={() => setShowRestockModal(true)}
+              className="relative flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg transition text-xs sm:text-sm font-semibold shadow-xs"
+            >
+              <ClipboardCheck className="w-4 h-4 text-amber-700" />
+              <span>Review Worker Restocks</span>
+              {pendingRestockCount > 0 && (
+                <span className="px-1.5 py-0.5 rounded-full bg-red-600 text-white font-bold text-xs animate-pulse">
+                  {pendingRestockCount}
+                </span>
+              )}
+            </button>
+          )}
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" /> Add Product
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -378,7 +447,91 @@ export default function ProductsPage({ workerMode = false }: { workerMode?: bool
 
       {showAdd && <ProductFormModal onClose={() => setShowAdd(false)} />}
       {editProduct && <ProductFormModal product={editProduct} onClose={() => setEditProduct(null)} />}
-      {restockProduct && <RestockModal product={restockProduct} onClose={() => setRestockProduct(null)} />}
+      {restockProduct && <RestockModal product={restockProduct} workerMode={workerMode} onClose={() => setRestockProduct(null)} />}
+
+      {/* Admin Restock Review Modal */}
+      {showRestockModal && (
+        <Modal title="Restock Approval & Review Queue" onClose={() => setShowRestockModal(false)} size="xl">
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500">
+              When sales workers or dispatch staff enter stock arrivals, they are held in this queue. Review the items and click <strong>Approve</strong> to validate and add the quantities into official store inventory.
+            </p>
+
+            {restockRequests.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-slate-200">
+                <ClipboardCheck className="w-10 h-10 mx-auto mb-2 text-slate-300" />
+                <p className="text-sm font-medium">No restock requests recorded yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {restockRequests.map((req: any) => {
+                  const isPending = req.status === 'PENDING';
+                  return (
+                    <div
+                      key={req.id}
+                      className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isPending
+                          ? 'bg-amber-50/60 border-amber-200'
+                          : req.status === 'APPROVED'
+                          ? 'bg-emerald-50/40 border-emerald-200'
+                          : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">
+                            {req.product?.name || `Product #${req.productId}`}
+                          </span>
+                          <Badge variant={isPending ? 'yellow' : req.status === 'APPROVED' ? 'green' : 'gray'}>
+                            {req.status}
+                          </Badge>
+                          <span className="text-xs font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                            +{req.quantity} units
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          Submitted by <strong className="text-slate-800">{req.worker?.name}</strong> ({req.worker?.role}) at {formatDateTime(req.createdAt)}
+                        </div>
+                        {req.notes && (
+                          <div className="text-xs text-slate-700 italic bg-white/70 p-2 rounded border border-slate-200">
+                            "{req.notes}"
+                          </div>
+                        )}
+                        {req.reviewedBy && (
+                          <div className="text-[11px] text-slate-500">
+                            Reviewed by {req.reviewedBy.name} at {formatDateTime(req.reviewedAt)}
+                          </div>
+                        )}
+                      </div>
+
+                      {isPending && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            disabled={approveRestockMutation.isPending}
+                            onClick={() => approveRestockMutation.mutate(req.id)}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-xs disabled:opacity-50"
+                          >
+                            <Check className="w-3.5 h-3.5" /> Approve & Update Stock
+                          </button>
+                          <button
+                            type="button"
+                            disabled={rejectRestockMutation.isPending}
+                            onClick={() => rejectRestockMutation.mutate(req.id)}
+                            className="px-3 py-1.5 border border-red-200 text-red-600 hover:bg-red-50 rounded-lg text-xs font-semibold transition disabled:opacity-50 flex items-center gap-1"
+                          >
+                            <X className="w-3.5 h-3.5" /> Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
 
       <DeleteConfirmModal
         isOpen={!!deleteTarget}

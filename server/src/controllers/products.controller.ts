@@ -330,17 +330,64 @@ export const restockProduct = async (
 
     const addQty = parseInt(quantity);
     const { notes } = req.body;
+    const isWorker = req.user!.role === Role.WORKER_A || req.user!.role === Role.WORKER_B;
+    const roleLabel = req.user!.role === Role.WORKER_A ? 'Sales Desk' : req.user!.role === Role.WORKER_B ? 'Dispatch' : 'Admin';
+
+    if (isWorker) {
+      // Worker submits restock request — requires admin confirmation before stock becomes valid
+      const request = await prisma.restockRequest.create({
+        data: {
+          productId: id,
+          workerId: req.user!.userId,
+          quantity: addQty,
+          notes: notes || null,
+          status: 'PENDING',
+        },
+        include: {
+          product: true,
+          worker: { select: { id: true, name: true, role: true } },
+        },
+      });
+
+      await createAuditLog(
+        req.user!.userId,
+        'REQUEST_RESTOCK',
+        'Product',
+        id,
+        { currentStock: existing.quantity },
+        { requestedQuantity: addQty, notes },
+        req.ip
+      );
+
+      await createNotification(
+        'RESTOCK_REVIEW_REQUIRED',
+        `⚠️ [Restock Pending Review] ${roleLabel} (${req.user!.name}) submitted a restock of +${addQty} units for "${existing.name}". Please review and confirm to apply.`,
+        Role.ADMIN,
+        undefined,
+        'Product',
+        id
+      );
+
+      emitToAdmin('restock:requested', request);
+
+      res.status(202).json({
+        success: true,
+        pendingApproval: true,
+        data: request,
+        message: `Restock request of ${addQty} units submitted. Admin review and confirmation is required before inventory updates.`,
+      });
+      return;
+    }
+
+    // Admin direct restock: immediate inventory update
     const updated = await prisma.product.update({
       where: { id },
       data: { quantity: { increment: addQty } },
     });
 
-    const isWorker = req.user!.role === Role.WORKER_A || req.user!.role === Role.WORKER_B;
-    const roleLabel = req.user!.role === Role.WORKER_A ? 'Worker A (Sales)' : req.user!.role === Role.WORKER_B ? 'Worker B (Dispatch)' : 'Admin';
-
     await createAuditLog(
       req.user!.userId,
-      isWorker ? 'WORKER_RESTOCK' : 'RESTOCK_PRODUCT',
+      'RESTOCK_PRODUCT',
       'Product',
       id,
       { quantity: existing.quantity },
@@ -349,8 +396,8 @@ export const restockProduct = async (
     );
 
     await createNotification(
-      isWorker ? 'WORKER_RESTOCK_ALERT' : 'PRODUCT_RESTOCKED',
-      `${isWorker ? '⚠️ [Worker Restock] ' : ''}${roleLabel} (${req.user!.name}) restocked ${addQty} units of "${updated.name}" (Stock now: ${updated.quantity})${notes ? ` — Note: ${notes}` : ''}`,
+      'PRODUCT_RESTOCKED',
+      `Admin (${req.user!.name}) restocked ${addQty} units of "${updated.name}" (Stock now: ${updated.quantity})${notes ? ` — Note: ${notes}` : ''}`,
       Role.ADMIN,
       undefined,
       'Product',
@@ -364,3 +411,190 @@ export const restockProduct = async (
     next(err);
   }
 };
+
+/**
+ * GET /api/products/restock-requests
+ * Admin or Worker: Get all restock requests.
+ */
+export const getRestockRequests = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const statusParam = req.query.status as string | undefined;
+    const where: any = {};
+    if (statusParam && ['PENDING', 'APPROVED', 'REJECTED'].includes(statusParam)) {
+      where.status = statusParam;
+    }
+
+    const requests = await prisma.restockRequest.findMany({
+      where,
+      include: {
+        product: { select: { id: true, name: true, category: true, quantity: true, price: true } },
+        worker: { select: { id: true, name: true, role: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({ success: true, data: requests });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/products/restock-requests/:id/approve
+ * Admin: Review and confirm a worker's restock request, applying the inventory addition.
+ */
+export const approveRestockRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+
+    const request = await prisma.restockRequest.findUnique({
+      where: { id },
+      include: { product: true, worker: true },
+    });
+
+    if (!request) {
+      res.status(404).json({ success: false, error: 'Restock request not found' });
+      return;
+    }
+
+    if (request.status !== 'PENDING') {
+      res.status(400).json({ success: false, error: `This restock request is already ${request.status.toLowerCase()}` });
+      return;
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Mark request as APPROVED
+      const approved = await tx.restockRequest.update({
+        where: { id },
+        data: {
+          status: 'APPROVED',
+          reviewedById: req.user!.userId,
+          reviewedAt: new Date(),
+        },
+        include: {
+          product: true,
+          worker: { select: { id: true, name: true, role: true } },
+          reviewedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      // 2. Increment product inventory
+      const updatedProduct = await tx.product.update({
+        where: { id: request.productId },
+        data: { quantity: { increment: request.quantity } },
+      });
+
+      return { approved, updatedProduct };
+    });
+
+    await createAuditLog(
+      req.user!.userId,
+      'APPROVE_RESTOCK',
+      'Product',
+      request.productId,
+      { previousStock: request.product.quantity },
+      { addedQuantity: request.quantity, newStock: result.updatedProduct.quantity },
+      req.ip
+    );
+
+    // Notify worker
+    await createNotification(
+      'RESTOCK_APPROVED',
+      `Admin approved your restock of +${request.quantity} units for "${request.product.name}". Inventory now updated.`,
+      request.worker.role as Role,
+      request.workerId,
+      'Product',
+      request.productId
+    );
+
+    emitToAdmin('product:restocked', { ...result.updatedProduct, restockedBy: request.worker.name, addQty: request.quantity });
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Restock confirmed! +${request.quantity} units added to "${request.product.name}".`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/products/restock-requests/:id/reject
+ * Admin: Reject a worker's restock request.
+ */
+export const rejectRestockRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id), 10);
+
+    const request = await prisma.restockRequest.findUnique({
+      where: { id },
+      include: { product: true, worker: true },
+    });
+
+    if (!request) {
+      res.status(404).json({ success: false, error: 'Restock request not found' });
+      return;
+    }
+
+    if (request.status !== 'PENDING') {
+      res.status(400).json({ success: false, error: `This restock request is already ${request.status.toLowerCase()}` });
+      return;
+    }
+
+    const rejected = await prisma.restockRequest.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        reviewedById: req.user!.userId,
+        reviewedAt: new Date(),
+      },
+      include: {
+        product: true,
+        worker: { select: { id: true, name: true, role: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    await createAuditLog(
+      req.user!.userId,
+      'REJECT_RESTOCK',
+      'Product',
+      request.productId,
+      null,
+      { rejectedQuantity: request.quantity },
+      req.ip
+    );
+
+    await createNotification(
+      'RESTOCK_REJECTED',
+      `Admin reviewed and rejected the restock request of +${request.quantity} units for "${request.product.name}".`,
+      request.worker.role as Role,
+      request.workerId,
+      'Product',
+      request.productId
+    );
+
+    res.json({
+      success: true,
+      data: rejected,
+      message: `Restock request for "${request.product.name}" rejected.`,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

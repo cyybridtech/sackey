@@ -8,6 +8,8 @@ import {
   updateSale,
   verifySale,
   deleteSale,
+  restoreSale,
+  permanentDeleteSale,
 } from '../controllers/sales.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/roles.middleware';
@@ -28,5 +30,7 @@ router.get('/', requireRole(Role.ADMIN), getSales);
 router.get('/:id', requireRole(Role.ADMIN), getSaleById);
 router.put('/:id', requireRole(Role.ADMIN), updateSale);
 router.post('/:id/verify', requireRole(Role.ADMIN), verifySale);
+router.post('/:id/restore', requireRole(Role.ADMIN), restoreSale);
+router.delete('/:id/permanent', requireRole(Role.ADMIN), permanentDeleteSale);
 
 export default router;
