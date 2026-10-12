@@ -7,6 +7,7 @@ import {
   deleteCustomer,
   getCustomerDebt,
   recordPayment,
+  recordAdvanceDeposit,
 } from '../controllers/customers.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireRole } from '../middleware/roles.middleware';
@@ -24,5 +25,6 @@ router.post('/', requireRole(Role.ADMIN, Role.WORKER_A), createCustomer);
 router.put('/:id', requireRole(Role.ADMIN, Role.WORKER_A), updateCustomer);
 router.delete('/:id', requireRole(Role.ADMIN), deleteCustomer);
 router.post('/:id/payment', requireRole(Role.ADMIN, Role.WORKER_A), recordPayment);
+router.post('/:id/advance', requireRole(Role.ADMIN, Role.WORKER_A), recordAdvanceDeposit);
 
 export default router;

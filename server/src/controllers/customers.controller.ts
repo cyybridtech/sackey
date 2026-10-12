@@ -459,3 +459,72 @@ export const recordPayment = async (
     next(err);
   }
 };
+
+/**
+ * POST /api/customers/:id/advance
+ * Record an advance deposit for a customer, incrementing their advanceBalance.
+ */
+export const recordAdvanceDeposit = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const customerId = parseInt(String(req.params.id));
+    const { amount, notes } = req.body;
+    const parsedAmount = Number(amount);
+
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      res.status(400).json({ success: false, error: 'A valid customer ID is required' });
+      return;
+    }
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      res.status(400).json({ success: false, error: 'amount must be a positive finite number' });
+      return;
+    }
+
+    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    if (!customer) {
+      res.status(404).json({ success: false, error: 'Customer not found' });
+      return;
+    }
+
+    const oldBalance = parseFloat(customer.advanceBalance.toString());
+
+    const updated = await prisma.customer.update({
+      where: { id: customerId },
+      data: { advanceBalance: { increment: parsedAmount } },
+    });
+
+    const newBalance = parseFloat(updated.advanceBalance.toString());
+
+    await createAuditLog(
+      req.user!.userId,
+      'ADVANCE_DEPOSIT',
+      'Customer',
+      customerId,
+      { advanceBalance: oldBalance, notes },
+      { advanceBalance: newBalance },
+      req.ip
+    );
+
+    await createNotification(
+      'ADVANCE_RECEIVED',
+      `Advance deposit of GH₵ ${parsedAmount.toFixed(2)} received from ${customer.name} (Balance: GH₵ ${newBalance.toFixed(2)})`,
+      Role.ADMIN,
+      undefined,
+      'Customer',
+      customerId
+    );
+
+    emitToAdmin('customer:advance-updated', { customerId, advanceBalance: newBalance });
+
+    res.json({
+      success: true,
+      data: { advanceBalance: newBalance },
+      message: 'Advance deposit recorded',
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -119,6 +119,41 @@ export const getDashboard = async (
       count: val.count,
     }));
 
+    // All active products (for clickable product cards)
+    const allProducts = await prisma.product.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, category: true, quantity: true, price: true },
+    });
+
+    // Product count per category
+    const productCategoryCounts = await prisma.product.groupBy({
+      by: ['category'],
+      where: { isActive: true },
+      _count: { id: true },
+    });
+    const productCategories = productCategoryCounts.map((c) => ({
+      category: c.category,
+      count: c._count.id,
+    }));
+
+    // Customers with outstanding debt (allDebtors)
+    const debtorLedgers = await prisma.creditLedger.findMany({
+      where: { status: { in: ['OUTSTANDING', 'PARTIAL'] } },
+      select: {
+        balance: true,
+        customer: { select: { id: true, name: true, phone: true } },
+      },
+    });
+    const debtorMap: Record<number, { id: number; name: string; phone: string | null; totalDebt: number }> = {};
+    for (const l of debtorLedgers) {
+      const cid = l.customer.id;
+      if (!debtorMap[cid]) {
+        debtorMap[cid] = { id: cid, name: l.customer.name, phone: l.customer.phone, totalDebt: 0 };
+      }
+      debtorMap[cid].totalDebt += parseFloat(l.balance.toString());
+    }
+    const allDebtors = Object.values(debtorMap).filter((d) => d.totalDebt > 0);
+
     const todaySalesTotal = parseFloat((todaySales._sum.finalTotal || 0).toString());
     const totalOutstandingDebt = parseFloat((creditAggregate._sum.balance || 0).toString());
 
@@ -147,6 +182,9 @@ export const getDashboard = async (
         lowStockProducts,
         recentActivity,
         pendingSmsCount,
+        allProducts,
+        allDebtors,
+        productCategories,
       },
     });
   } catch (err) {
@@ -214,6 +252,91 @@ export const getSalesReport = async (
         paymentBreakdown: { CC: ccTotal, CREDIT: creditTotal },
         typeBreakdown: { WHOLESALE: wholesaleTotal, RETAIL: retailTotal },
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/admin/dashboard/analytics
+ * Sales analytics for a period with optional month comparison.
+ */
+export const getSalesAnalytics = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { period = '7d', compareMonth } = req.query;
+
+    const now = new Date();
+    const dateFrom = new Date();
+
+    if (period === '3d') dateFrom.setDate(now.getDate() - 3);
+    else if (period === '7d') dateFrom.setDate(now.getDate() - 7);
+    else if (period === '30d') dateFrom.setDate(now.getDate() - 30);
+    else if (period === '3m') dateFrom.setMonth(now.getMonth() - 3);
+    else if (period === '6m') dateFrom.setMonth(now.getMonth() - 6);
+    else if (period === '1y') dateFrom.setFullYear(now.getFullYear() - 1);
+    else dateFrom.setDate(now.getDate() - 7); // default 7d
+
+    // Fetch GREEN sales grouped by day
+    const sales = await prisma.sale.findMany({
+      where: {
+        status: 'GREEN',
+        deletedAt: null,
+        saleDate: { gte: dateFrom },
+      },
+      select: { saleDate: true, finalTotal: true, paymentMode: true, saleType: true },
+    });
+
+    // Group by date
+    const grouped: Record<string, { date: string; total: number; cc: number; credit: number; wholesale: number; retail: number; count: number }> = {};
+    for (const s of sales) {
+      const key = s.saleDate.toISOString().split('T')[0];
+      if (!grouped[key]) grouped[key] = { date: key, total: 0, cc: 0, credit: 0, wholesale: 0, retail: 0, count: 0 };
+      const amount = Number(s.finalTotal);
+      grouped[key].total += amount;
+      grouped[key].count += 1;
+      if (s.paymentMode === 'CC') grouped[key].cc += amount;
+      else grouped[key].credit += amount;
+      if (s.saleType === 'WHOLESALE') grouped[key].wholesale += amount;
+      else grouped[key].retail += amount;
+    }
+    const chartData = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+
+    // If compareMonth provided (format: 'YYYY-MM'), fetch that month too
+    let compareData: typeof chartData = [];
+    if (compareMonth && typeof compareMonth === 'string' && /^\d{4}-\d{2}$/.test(compareMonth)) {
+      const [y, m] = compareMonth.split('-').map(Number);
+      const monthStart = new Date(y, m - 1, 1);
+      const monthEnd = new Date(y, m, 0, 23, 59, 59);
+      const compareSales = await prisma.sale.findMany({
+        where: { status: 'GREEN', deletedAt: null, saleDate: { gte: monthStart, lte: monthEnd } },
+        select: { saleDate: true, finalTotal: true, paymentMode: true, saleType: true },
+      });
+      const cGrouped: typeof grouped = {};
+      for (const s of compareSales) {
+        const key = s.saleDate.toISOString().split('T')[0];
+        if (!cGrouped[key]) cGrouped[key] = { date: key, total: 0, cc: 0, credit: 0, wholesale: 0, retail: 0, count: 0 };
+        const amount = Number(s.finalTotal);
+        cGrouped[key].total += amount;
+        cGrouped[key].count += 1;
+        if (s.paymentMode === 'CC') cGrouped[key].cc += amount;
+        else cGrouped[key].credit += amount;
+        if (s.saleType === 'WHOLESALE') cGrouped[key].wholesale += amount;
+        else cGrouped[key].retail += amount;
+      }
+      compareData = Object.values(cGrouped).sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    const grandTotal = chartData.reduce((s, d) => s + d.total, 0);
+    const totalCount = chartData.reduce((s, d) => s + d.count, 0);
+
+    res.json({
+      success: true,
+      data: { chartData, compareData, grandTotal, totalCount, period },
     });
   } catch (err) {
     next(err);

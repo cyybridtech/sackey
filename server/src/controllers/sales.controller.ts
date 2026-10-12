@@ -936,11 +936,19 @@ export const getMySales = async (
   try {
     const userId = req.user!.userId;
     const role = req.user!.role;
+    const { dateFrom, dateTo } = req.query;
 
     const where: any =
       role === Role.WORKER_A
         ? { workerAId: userId, deletedAt: null }
         : { workerBId: userId, deletedAt: null };
+
+    if (dateFrom) where.saleDate = { ...where.saleDate, gte: new Date(dateFrom as string) };
+    if (dateTo) {
+      const end = new Date(dateTo as string);
+      end.setHours(23, 59, 59, 999);
+      where.saleDate = { ...where.saleDate, lte: end };
+    }
 
     const sales = await prisma.sale.findMany({
       where,

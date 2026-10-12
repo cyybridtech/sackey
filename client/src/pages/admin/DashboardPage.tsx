@@ -1,29 +1,372 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
-  DollarSign,
-  Package,
-  MessageSquare,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Layers,
-  ArrowRight,
-  UserPlus,
-  PlusCircle,
-  ShieldCheck,
-  Sparkles,
+  BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts';
+import {
+  DollarSign, Package, MessageSquare, TrendingUp,
+  AlertTriangle, CheckCircle, Clock, AlertCircle,
+  Layers, ArrowRight, UserPlus, PlusCircle, ShieldCheck,
+  Sparkles, X, BarChart2, Users,
 } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import api from '../../api/axios';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import type { DashboardStats } from '../../types';
 import Spinner from '../../components/ui/Spinner';
 
+// ── Utility ───────────────────────────────────────────────────────────────────
+
+const periodOptions = [
+  { id: '3d', label: '3 Days' },
+  { id: '7d', label: '7 Days' },
+  { id: '30d', label: '30 Days' },
+  { id: '3m', label: '3 Months' },
+  { id: '6m', label: '6 Months' },
+  { id: '1y', label: '1 Year' },
+] as const;
+
+const salesPeriodOptions = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'This Week' },
+  { id: 'month', label: 'This Month' },
+  { id: '3m', label: '3 Months' },
+  { id: 'all', label: 'All Time' },
+] as const;
+
+function getPeriodDates(period: string): { dateFrom: string; dateTo: string } {
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  let from = new Date();
+  if (period === 'today') { /* same day */ }
+  else if (period === 'week') from.setDate(now.getDate() - 7);
+  else if (period === 'month') from.setMonth(now.getMonth() - 1);
+  else if (period === '3m') from.setMonth(now.getMonth() - 3);
+  else if (period === 'all') from = new Date('2020-01-01');
+  return { dateFrom: from.toISOString().split('T')[0], dateTo: today };
+}
+
+// ── Overlay wrapper ───────────────────────────────────────────────────────────
+
+function Overlay({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white w-full sm:rounded-2xl sm:max-w-2xl max-h-[90vh] flex flex-col shadow-2xl rounded-t-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0">
+          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Sales Report Modal ────────────────────────────────────────────────────────
+
+function SalesReportModal({ onClose }: { onClose: () => void }) {
+  const [period, setPeriod] = useState<string>('today');
+  const dates = getPeriodDates(period);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['sales-report', dates.dateFrom, dates.dateTo],
+    queryFn: async () => {
+      const res = await api.get('/admin/dashboard/sales-report', { params: dates });
+      return res.data.data;
+    },
+  });
+
+  return (
+    <Overlay title="Sales Report" onClose={onClose}>
+      {/* Period picker */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto scrollbar-none">
+        {salesPeriodOptions.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setPeriod(p.id)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+              period === p.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-10"><Spinner /></div>
+      ) : (
+        <>
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div className="bg-blue-50 rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-500">Total Sales</p>
+              <p className="text-xl font-black text-blue-700">{formatCurrency(data?.totalRevenue || 0)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 text-center">
+              <p className="text-xs text-slate-500">Transactions</p>
+              <p className="text-xl font-black text-slate-800">{data?.totalCount || 0}</p>
+            </div>
+          </div>
+
+          {/* Table */}
+          {(data?.dailyBreakdown || []).length === 0 ? (
+            <p className="text-center text-slate-400 py-8 text-sm">No sales in this period.</p>
+          ) : (
+            <div className="space-y-2">
+              {(data?.dailyBreakdown || []).map((row: any) => (
+                <div key={row.date} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-xl">
+                  <span className="text-sm font-semibold text-slate-700">{formatDate(row.date)}</span>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-slate-900">{formatCurrency(row.total)}</p>
+                    <p className="text-xs text-slate-400">{row.count} sale{row.count !== 1 ? 's' : ''}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </Overlay>
+  );
+}
+
+// ── Debtors Modal ─────────────────────────────────────────────────────────────
+
+function DebtorsModal({ debtors, onClose }: { debtors: any[]; onClose: () => void }) {
+  return (
+    <Overlay title="Outstanding Debts" onClose={onClose}>
+      {debtors.length === 0 ? (
+        <div className="text-center py-10">
+          <CheckCircle className="w-10 h-10 text-green-400 mx-auto mb-2" />
+          <p className="text-sm text-slate-500">No outstanding debts.</p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <p className="text-xs text-slate-400 mb-3">{debtors.length} customer{debtors.length !== 1 ? 's' : ''} with outstanding balance</p>
+          {debtors.map((d: any) => (
+            <div key={d.id} className="flex items-center justify-between px-4 py-3 border border-red-100 bg-red-50 rounded-xl">
+              <div>
+                <p className="font-bold text-slate-900 text-sm">{d.name}</p>
+                <p className="text-xs text-slate-400">{d.phone || '—'}</p>
+              </div>
+              <p className="font-black text-red-600 text-base">{formatCurrency(parseFloat(d.totalDebt || '0'))}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </Overlay>
+  );
+}
+
+// ── Stock Modal ───────────────────────────────────────────────────────────────
+
+function StockModal({ products, onClose }: { products: any[]; onClose: () => void }) {
+  const [search, setSearch] = useState('');
+  const filtered = products.filter((p) =>
+    !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase())
+  );
+  return (
+    <Overlay title="Warehouse Stock" onClose={onClose}>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search products..."
+        className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <div className="space-y-2">
+        {filtered.map((p: any) => (
+          <div key={p.id} className="flex items-center justify-between px-4 py-3 border border-slate-100 rounded-xl bg-slate-50">
+            <div>
+              <p className="font-semibold text-slate-900 text-sm">{p.name}</p>
+              <p className="text-xs text-slate-400">{p.category}</p>
+            </div>
+            <div className="text-right">
+              <p className={`font-bold text-sm ${p.quantity <= 0 ? 'text-red-600' : p.quantity < 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {p.quantity} pcs
+              </p>
+              <p className="text-xs text-slate-500">{formatCurrency(parseFloat(p.price || '0'))}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Overlay>
+  );
+}
+
+// ── Analytics Panel ───────────────────────────────────────────────────────────
+
+function AnalyticsPanel() {
+  const [period, setPeriod] = useState<string>('7d');
+  const [compareMonth, setCompareMonth] = useState('');
+
+  const { data: analytics, isLoading } = useQuery({
+    queryKey: ['dashboard-analytics', period, compareMonth],
+    queryFn: async () => {
+      const res = await api.get('/admin/dashboard/analytics', {
+        params: { period, ...(compareMonth ? { compareMonth } : {}) },
+      });
+      return res.data.data;
+    },
+  });
+
+  // Merge chartData + compareData for recharts dual-line
+  const mergedData = (() => {
+    if (!analytics) return [];
+    const map = new Map<string, any>();
+    (analytics.chartData || []).forEach((d: any) => {
+      const label = (() => { try { return format(parseISO(d.date), 'MMM dd'); } catch { return d.date; } })();
+      map.set(d.date, { date: label, current: d.total });
+    });
+    (analytics.compareData || []).forEach((d: any) => {
+      const label = (() => { try { return format(parseISO(d.date), 'MMM dd'); } catch { return d.date; } })();
+      const existing = map.get(d.date);
+      if (existing) existing.compare = d.total;
+      else map.set(d.date, { date: label, compare: d.total });
+    });
+    return Array.from(map.values());
+  })();
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-blue-600" /> Sales Analytics
+          </h3>
+          <p className="text-xs text-slate-400">Performance trends — click a period or compare months</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Period buttons */}
+          <div className="flex gap-1 overflow-x-auto scrollbar-none">
+            {periodOptions.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setPeriod(p.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition ${
+                  period === p.id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Compare month */}
+      <div className="flex items-center gap-2 mb-4 text-xs">
+        <label className="text-slate-500 font-semibold whitespace-nowrap">Compare with:</label>
+        <input
+          type="month"
+          value={compareMonth}
+          onChange={(e) => setCompareMonth(e.target.value)}
+          className="border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        {compareMonth && (
+          <button
+            onClick={() => setCompareMonth('')}
+            className="p-1 text-slate-400 hover:text-slate-600 transition"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Chart */}
+      {isLoading ? (
+        <div className="flex justify-center py-12"><Spinner /></div>
+      ) : mergedData.length === 0 ? (
+        <div className="text-center py-12 text-slate-400">
+          <BarChart2 className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+          <p className="text-sm">No sales data for this period.</p>
+        </div>
+      ) : (
+        <>
+          <div className="h-52 sm:h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={mergedData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  tickFormatter={(v: number) => `GH₵${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  formatter={(v: number, name: string) => [
+                    formatCurrency(v),
+                    name === 'current' ? 'Current Period' : `Compare (${compareMonth})`,
+                  ]}
+                  contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', color: '#fff', border: 'none', fontSize: 12 }}
+                />
+                {compareMonth && <Legend />}
+                <Line
+                  type="monotone"
+                  dataKey="current"
+                  stroke="#2563eb"
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 5 }}
+                  name="current"
+                />
+                {compareMonth && (
+                  <Line
+                    type="monotone"
+                    dataKey="compare"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={false}
+                    name="compare"
+                  />
+                )}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Summary pills */}
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            <div className="bg-blue-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Grand Total</p>
+              <p className="text-sm font-black text-blue-700">{formatCurrency(analytics?.grandTotal || 0)}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Transactions</p>
+              <p className="text-sm font-black text-slate-800">{analytics?.totalCount || 0}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-3 text-center">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">Avg / Day</p>
+              <p className="text-sm font-black text-slate-800">
+                {mergedData.length > 0
+                  ? formatCurrency((analytics?.grandTotal || 0) / mergedData.length)
+                  : formatCurrency(0)}
+              </p>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Main Dashboard ────────────────────────────────────────────────────────────
+
 export default function DashboardPage() {
   const navigate = useNavigate();
+
+  // Modal states
+  const [showSalesReport, setShowSalesReport] = useState(false);
+  const [showDebtors, setShowDebtors] = useState(false);
+  const [showStock, setShowStock] = useState(false);
+  const [showProducts, setShowProducts] = useState(false);
+
   const { data, isLoading } = useQuery<DashboardStats>({
     queryKey: ['admin-dashboard'],
     queryFn: async () => {
@@ -43,12 +386,13 @@ export default function DashboardPage() {
   if (!data) return null;
 
   const flaggedCount = data.saleStatusCounts?.FLAGGED ?? 0;
+  const allProducts: any[] = (data as any).allProducts || [];
+  const allDebtors: any[] = (data as any).allDebtors || [];
 
   return (
     <div className="space-y-6">
-      {/* Dynamic Greeting & Live Store Header */}
+      {/* Hero Header */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-900 rounded-3xl p-5 sm:p-7 text-white shadow-xl relative overflow-hidden">
-        {/* Background decorative glow */}
         <div className="absolute -right-10 -bottom-10 w-60 h-60 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute right-40 -top-10 w-48 h-48 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
 
@@ -64,7 +408,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Action Pills */}
           <div className="flex flex-wrap items-center gap-2.5">
             <button
               onClick={() => navigate('/admin/products')}
@@ -83,7 +426,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Action Alerts */}
         {(data.deletedSaleCount > 0 || flaggedCount > 0) && (
           <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2.5">
             {data.deletedSaleCount > 0 && (
@@ -110,92 +452,122 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Top Essential Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        {/* Today's Sales */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition">
+      {/* ── Top Metric Cards — 2-col on mobile ────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+        {/* Today's Sales — clickable */}
+        <button
+          onClick={() => setShowSalesReport(true)}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-blue-200 shadow-sm hover:shadow-md hover:border-blue-400 active:scale-95 transition text-left"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Sales</span>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <DollarSign className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Today's Sales</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 mt-2">
+          <p className="text-lg sm:text-2xl font-extrabold text-blue-700 mt-1.5 break-all leading-tight">
             {formatCurrency(data.todaySalesTotal)}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Confirmed matched transactions</p>
-        </div>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>View report</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
 
-        {/* Total Debt */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition">
+        {/* Outstanding Debt — clickable */}
+        <button
+          onClick={() => setShowDebtors(true)}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-red-200 shadow-sm hover:shadow-md hover:border-red-400 active:scale-95 transition text-left"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Outstanding Debt</span>
-            <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Outstanding Debt</span>
+            <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-red-600 mt-2">
+          <p className="text-lg sm:text-2xl font-extrabold text-red-600 mt-1.5 break-all leading-tight">
             {formatCurrency(data.totalOutstandingDebt)}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Customer credit balance owed</p>
-        </div>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>View debtors</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
 
-        {/* Physical Stock Units */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition">
+        {/* Warehouse Stock — clickable */}
+        <button
+          onClick={() => setShowStock(true)}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-emerald-200 shadow-sm hover:shadow-md hover:border-emerald-400 active:scale-95 transition text-left"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Warehouse Stock</span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Layers className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Warehouse Stock</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 mt-2">
+          <p className="text-lg sm:text-2xl font-extrabold text-slate-900 mt-1.5">
             {data.totalStockUnits.toLocaleString()} <span className="text-xs font-semibold text-slate-500">pcs</span>
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Physical units in inventory</p>
-        </div>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>View all stock</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
 
-        {/* Product Catalog */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition">
+        {/* Product Lines — clickable */}
+        <button
+          onClick={() => setShowProducts(true)}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-indigo-200 shadow-sm hover:shadow-md hover:border-indigo-400 active:scale-95 transition text-left"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Product Lines</span>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <Package className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Product Lines</span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-slate-900 mt-2">
+          <p className="text-lg sm:text-2xl font-extrabold text-slate-900 mt-1.5">
             {data.totalProducts ?? 0} <span className="text-xs font-semibold text-slate-500">items</span>
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Active registered inventory</p>
-        </div>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>Browse catalog</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
 
-        {/* Pending SMS */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition">
+        {/* Pending SMS — navigate */}
+        <button
+          onClick={() => navigate('/admin/sms-queue')}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-amber-200 shadow-sm hover:shadow-md hover:border-amber-400 active:scale-95 transition text-left"
+        >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Pending SMS</span>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <MessageSquare className="w-5 h-5" />
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Pending SMS</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <MessageSquare className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-extrabold text-amber-600 mt-2">
+          <p className="text-lg sm:text-2xl font-extrabold text-amber-600 mt-1.5">
             {data.pendingSms.toString()}
           </p>
-          <p className="text-[11px] text-slate-400 mt-1">Awaiting owner approval</p>
-        </div>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>Approve messages</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
       </div>
 
-      {/* Dual Confirmation Pipeline Cards */}
+      {/* ── Verification Pipeline ─────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-blue-600" />
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Worker Verification Pipeline (Click to Inspect)
+              Worker Verification Pipeline
             </h3>
           </div>
           <span className="text-xs text-slate-400">Independent check system</span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               label: 'Sales Logged (Pending Dispatch)',
@@ -229,14 +601,14 @@ export default function DashboardPage() {
             <button
               key={item.key}
               onClick={() => navigate(`/admin/sales?status=${item.key}`)}
-              className={`${item.cardBg} border rounded-2xl p-4 text-left transition-all hover:scale-[1.01] shadow-sm cursor-pointer space-y-2`}
+              className={`${item.cardBg} border rounded-2xl p-3.5 text-left transition-all hover:scale-[1.01] shadow-sm cursor-pointer space-y-1.5`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-bold text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-xs">
                   {item.icon}
-                  <span>{item.label}</span>
+                  <span className="leading-tight">{item.label}</span>
                 </div>
-                <ArrowRight className="w-3.5 h-3.5 opacity-50" />
+                <ArrowRight className="w-3 h-3 opacity-50 shrink-0" />
               </div>
               <p className="text-3xl font-black">
                 {data.saleStatusCounts?.[item.key as keyof typeof data.saleStatusCounts] ?? 0}
@@ -247,9 +619,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Analytics & Low Stock Grid */}
+      {/* ── Chart + Low Stock ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Sales Chart */}
+        {/* Sales Trend Chart */}
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -315,9 +687,7 @@ export default function DashboardPage() {
                     </div>
                     <span
                       className={`text-xs font-extrabold px-2.5 py-1 rounded-lg ${
-                        p.quantity === 0
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-amber-100 text-amber-700'
+                        p.quantity === 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                       }`}
                     >
                       {p.quantity} pcs left
@@ -330,7 +700,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity Audit Trail */}
+      {/* ── Analytics Panel ───────────────────────────────────────────────── */}
+      <AnalyticsPanel />
+
+      {/* ── Recent Activity ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-slate-800">Recent System Activity</h3>
@@ -365,6 +738,31 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* ── Modals ────────────────────────────────────────────────────────── */}
+      {showSalesReport && <SalesReportModal onClose={() => setShowSalesReport(false)} />}
+      {showDebtors && <DebtorsModal debtors={allDebtors} onClose={() => setShowDebtors(false)} />}
+      {showStock && <StockModal products={allProducts} onClose={() => setShowStock(false)} />}
+      {showProducts && (
+        <Overlay title="Product Catalog" onClose={() => setShowProducts(false)}>
+          <div className="space-y-2">
+            {allProducts.map((p: any) => (
+              <div key={p.id} className="flex items-center justify-between px-4 py-3 border border-slate-100 rounded-xl bg-slate-50">
+                <div>
+                  <p className="font-semibold text-slate-900 text-sm">{p.name}</p>
+                  <p className="text-xs text-slate-400">{p.category}</p>
+                </div>
+                <div className="text-right">
+                  <p className={`font-bold text-sm ${p.quantity < 10 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {p.quantity} pcs
+                  </p>
+                  <p className="text-xs text-slate-500">{formatCurrency(parseFloat(p.price || '0'))}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Overlay>
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getDashboard,
   getSalesReport,
+  getSalesAnalytics,
   getUsers,
   createUser,
   updateUser,
@@ -23,6 +24,7 @@ router.use(requireRole(Role.ADMIN));
 // Dashboard
 router.get('/dashboard', getDashboard);
 router.get('/dashboard/sales-report', getSalesReport);
+router.get('/dashboard/analytics', getSalesAnalytics);
 
 // Users
 router.get('/users', getUsers);
