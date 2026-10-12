@@ -370,7 +370,13 @@ const queueSaleSms = async (
     `${paymentDetails}\n` +
     `Thank you for your purchase!`;
 
-  await tx.smsQueue.create({ data: { customerId, saleId, message } });
+  await tx.smsQueue.create({
+    data: {
+      customer: { connect: { id: customerId } },
+      sale: { connect: { id: saleId } },
+      message,
+    },
+  });
 };
 
 // Full sale relations for response

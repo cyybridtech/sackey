@@ -419,8 +419,8 @@ export const recordPayment = async (
           `Remaining balance: GH₵ ${newBalance.toFixed(2)}. Thank you.`;
         await tx.smsQueue.create({
           data: {
-            customerId,
-            saleId: ledger.saleId,
+            customer: { connect: { id: customerId } },
+            sale: ledger.saleId ? { connect: { id: ledger.saleId } } : undefined,
             message: smsMessage,
           },
         });
@@ -622,7 +622,12 @@ export const recordBulkPayment = async (
           smsMsg += ` Advance credit: GH\u20b5 ${newAdv.toFixed(2)}.`;
         }
         smsMsg += ' Thank you — B.A. Ent';
-        await tx.smsQueue.create({ data: { customerId, message: smsMsg } });
+        await tx.smsQueue.create({
+          data: {
+            customer: { connect: { id: customerId } },
+            message: smsMsg,
+          },
+        });
       }
 
       return { updatedCustomer, advanceAdded: advanceToAdd };
