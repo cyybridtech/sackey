@@ -98,6 +98,7 @@ model Customer {
   address      String?      @db.Text
   customerType CustomerType @default(REGISTERED) @map("customer_type")
   notes        String?      @db.Text
+  advanceBalance Decimal    @default(0) @map("advance_balance") @db.Decimal(10, 2)
   createdAt    DateTime     @default(now()) @map("created_at")
   updatedAt    DateTime     @updatedAt @map("updated_at")
 
@@ -212,15 +213,15 @@ model Notification {
 model SmsQueue {
   id              Int       @id @default(autoincrement())
   customerId      Int       @map("customer_id")
-  saleId          Int       @map("sale_id")
+  saleId          Int?      @map("sale_id")
   message         String    @db.Text
   status          SmsStatus @default(PENDING)
   adminApprovedAt DateTime? @map("admin_approved_at")
   sentAt          DateTime? @map("sent_at")
   createdAt       DateTime  @default(now()) @map("created_at")
 
-  customer Customer @relation(fields: [customerId], references: [id])
-  sale     Sale     @relation(fields: [saleId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  sale     Sale?     @relation(fields: [saleId], references: [id])
 
   @@map("sms_queue")
 }

@@ -248,6 +248,13 @@ const handleCreditLedger = async (
   upfrontPayment: number = 0,
   recordedById?: number
 ): Promise<{ towardsSale: number; towardsDebt: number; towardsAdvance: number }> => {
+  const existing = await tx.creditLedger.findUnique({
+    where: { saleId },
+  });
+  if (existing) {
+    return { towardsSale: Number(existing.amountPaid), towardsDebt: 0, towardsAdvance: 0 };
+  }
+
   // How much of the payment covers this sale
   const towardsSale = Math.min(Math.max(0, Number(upfrontPayment) || 0), finalTotal);
   const balance = Math.round((finalTotal - towardsSale) * 100) / 100;
@@ -604,7 +611,7 @@ export const workerASale = async (
       // Stock is NOT deducted on initial BLUE sale; it will only deduct when Worker B confirms
       const initialStatus = initialSaleStatusHelper(true);
       const newSale = await prisma.$transaction(async (tx) => {
-        return tx.sale.create({
+        const sale = await tx.sale.create({
           data: {
             customerId: resolvedCustomerId,
             workerAId,
@@ -621,6 +628,19 @@ export const workerASale = async (
           },
           include: saleInclude,
         });
+
+        if (paymentMode === PaymentMode.CREDIT) {
+          await handleCreditLedger(
+            tx,
+            resolvedCustomerId,
+            sale.id,
+            finalTotal,
+            amountPaid ? Number(amountPaid) : 0,
+            workerAId
+          );
+        }
+
+        return sale;
       });
 
       await createNotification(

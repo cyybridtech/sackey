@@ -64,19 +64,18 @@ export const sendSms = async (
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
         'X-API-Key': apiKey,
-        'api-key': apiKey,
       },
       body: JSON.stringify(payload),
     });
 
     const data: any = await response.json().catch(() => null);
 
-    if (!response.ok) {
+    if (!response.ok || data?.success === false) {
       const errMsg =
         data?.message ||
         data?.error ||
+        data?.data?.message ||
         `Vynfy API returned status ${response.status} (${response.statusText})`;
       console.error(`[Vynfy SMS] Failed: ${errMsg}`);
       return {

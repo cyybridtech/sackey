@@ -215,6 +215,9 @@ export default function MakeSalePage() {
     void queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] });
     void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
     void queryClient.invalidateQueries({ queryKey: ['customers-worker'] });
+    void queryClient.invalidateQueries({ queryKey: ['customer-search'] });
+    void queryClient.invalidateQueries({ queryKey: ['customers'] });
+    void queryClient.invalidateQueries({ queryKey: ['my-sales'] });
   };
 
   const saleMutation = useMutation({
