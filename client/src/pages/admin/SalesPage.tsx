@@ -209,284 +209,281 @@ export default function SalesPage() {
         </button>
       </div>
 
-      {/* Sales List: Mobile Card View (md:hidden) & Desktop Table View (hidden md:block) */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      {/* Sales List Grouped by Date (Collapsible Accordion View) */}
+      <div className="space-y-4">
         {isLoading ? (
-          <div className="flex justify-center py-16"><Spinner /></div>
-        ) : sales.length === 0 ? (
-          <div className="text-center py-16 text-slate-400">
-            <HelpCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
-            <p>No sales matching the selected filters.</p>
+          <div className="bg-white rounded-xl border border-slate-200 p-16 flex justify-center shadow-sm">
+            <Spinner />
           </div>
-        ) : deletedOnly ? (
-          /* DELETED RECORDS GROUPED BY DATE VIEW */
-          <div className="p-4 space-y-4">
-            {(() => {
-              const groups: Record<string, any[]> = {};
-              sales.forEach((s: any) => {
-                const dateKey = s.deletedAt ? s.deletedAt.split('T')[0] : s.saleDate.split('T')[0];
-                if (!groups[dateKey]) groups[dateKey] = [];
-                groups[dateKey].push(s);
-              });
-              const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-
-              return sortedDates.map((dateKey) => {
-                const groupSales = groups[dateKey];
-                const isExpanded = expandedDates[dateKey] !== false;
-                const groupTotal = groupSales.reduce((acc, s) => acc + (parseFloat(s.finalTotal) || 0), 0);
-
-                return (
-                  <div key={dateKey} className="border border-red-200 rounded-xl overflow-hidden bg-red-50/20">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedDates((prev) => ({ ...prev, [dateKey]: !isExpanded }))}
-                      className="w-full flex items-center justify-between p-3.5 bg-red-100/50 hover:bg-red-100/80 transition text-left text-red-950 font-semibold"
-                    >
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? <ChevronDown className="w-4 h-4 text-red-700" /> : <ChevronRight className="w-4 h-4 text-red-700" />}
-                        <Calendar className="w-4 h-4 text-red-700" />
-                        <span className="text-sm font-bold">{formatDate(dateKey)}</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-200 text-red-800 font-medium">
-                          {groupSales.length} deleted record{groupSales.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
-                      <div className="text-right text-xs">
-                        <span className="text-red-700 font-mono font-bold">{formatCurrency(groupTotal)}</span>
-                      </div>
-                    </button>
-
-                    {isExpanded && (
-                      <div className="divide-y divide-red-100 bg-white">
-                        {groupSales.map((sale: any) => (
-                          <div
-                            key={sale.id}
-                            className="p-3.5 hover:bg-red-50/30 flex flex-col md:flex-row md:items-center justify-between gap-3 transition"
-                          >
-                            <div
-                              onClick={() => setSelectedSale(sale)}
-                              className="flex-1 cursor-pointer space-y-1"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono font-bold text-slate-800 text-sm">#{sale.id}</span>
-                                <Badge variant="red">Deleted</Badge>
-                                <span className="text-xs text-slate-500">
-                                  by {sale.deletedBy?.name || 'Staff'} ({sale.deletedByRole || 'Staff'}) at {formatDateTime(sale.deletedAt)}
-                                </span>
-                              </div>
-                              <div className="text-xs text-slate-700">
-                                <strong className="text-slate-900">{sale.customer?.name}</strong> • {sale.customer?.phone || 'No phone'} • Total: <strong className="text-slate-900">{formatCurrency(parseFloat(sale.finalTotal))}</strong>
-                              </div>
-                              <p className="text-[11px] text-slate-500 line-clamp-1">
-                                Items: {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ')}
-                              </p>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => { setSelectedSale(sale); setEditingSale(false); }}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-medium flex items-center gap-1 border border-blue-200"
-                              >
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </button>
-                              <button
-                                type="button"
-                                disabled={restoreSaleMutation.isPending}
-                                onClick={() => restoreSaleMutation.mutate(sale.id)}
-                                className="px-2.5 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5" /> Restore
-                              </button>
-                              <button
-                                type="button"
-                                disabled={permanentDeleteMutation.isPending}
-                                onClick={() => { setSelectedSale(sale); setShowPermanentDeleteModal(true); }}
-                                className="px-2.5 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Hard Delete
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              });
-            })()}
+        ) : sales.length === 0 ? (
+          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center text-slate-400 shadow-sm">
+            <HelpCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+            <p className="text-base font-medium text-slate-600">No sales matching the selected filters.</p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting the filter date range, payment mode, or status.</p>
           </div>
         ) : (
-          <>
-            {/* Mobile View: Card Stack */}
-            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
-              {sales.map((sale: any) => {
-                const sb = sale.deletedAt
-                  ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'staff'}` }
-                  : sale.status === 'FLAGGED'
-                  ? {
-                      variant: 'orange',
-                      label: sale.workerAId && sale.workerBId
-                        ? 'Mismatch Flagged'
-                        : sale.workerBId
-                          ? 'Dispatch Awaiting Sales'
-                          : sale.paymentMode === 'CREDIT'
-                            ? 'Credit Awaiting Dispatch'
-                            : 'Sales Awaiting Dispatch',
-                    }
-                  : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
+          (() => {
+            // Group sales by date
+            const groups: Record<string, any[]> = {};
+            let grandTotal = 0;
 
-                return (
-                  <div
-                    key={sale.id}
-                    onClick={() => setSelectedSale(sale)}
-                    className={`p-4 rounded-xl border transition cursor-pointer space-y-2.5 ${
-                      sale.deletedAt
-                        ? 'bg-red-50/60 border-red-200'
-                        : sale.status === 'FLAGGED'
-                        ? 'bg-amber-50/60 border-amber-200'
-                        : 'bg-white border-slate-200 hover:border-blue-300 shadow-sm'
-                    }`}
-                  >
-                    {/* Header: ID, Date, Status */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-slate-700 text-sm">#{sale.id}</span>
-                        <span className="text-xs text-slate-400">{formatDateTime(sale.saleDate)}</span>
-                      </div>
-                      <Badge variant={sb.variant}>{sb.label}</Badge>
-                    </div>
+            sales.forEach((s: any) => {
+              const rawDate = deletedOnly && s.deletedAt ? s.deletedAt : (s.saleDate || s.createdAt);
+              const dateKey = rawDate ? rawDate.split('T')[0] : 'Unknown Date';
+              if (!groups[dateKey]) groups[dateKey] = [];
+              groups[dateKey].push(s);
+              grandTotal += parseFloat(s.finalTotal) || 0;
+            });
 
-                    {/* Customer & Total */}
-                    <div className="flex items-start justify-between gap-2 border-t border-slate-100 pt-2">
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">{sale.customer?.name}</p>
-                        <p className="text-xs text-slate-400">{sale.customer?.phone || 'No phone'}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[11px] text-slate-400 uppercase font-semibold">Final Total</p>
-                        <p className="font-extrabold text-slate-900 text-base">
-                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? '—' : formatCurrency(parseFloat(sale.finalTotal))}
-                        </p>
-                      </div>
-                    </div>
+            // Sort dates descending (newest date first)
+            const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
 
-                    {/* Items Summary */}
-                    <div className="bg-slate-50 rounded-lg p-2.5 text-xs text-slate-600 border border-slate-100">
-                      <span className="font-semibold block mb-0.5 text-slate-700">{sale.saleItems?.length} item(s):</span>
-                      <p className="text-slate-500 line-clamp-2">
-                        {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ')}
-                      </p>
-                    </div>
+            // Sort transactions within each date group descending (newest transaction first)
+            sortedDates.forEach((dateKey) => {
+              groups[dateKey].sort((a, b) => {
+                const timeA = new Date(a.saleDate || a.createdAt || a.deletedAt || 0).getTime();
+                const timeB = new Date(b.saleDate || b.createdAt || b.deletedAt || 0).getTime();
+                return timeB - timeA;
+              });
+            });
 
-                    {/* Payment & Staff Footer */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-xs">
-                      <div className="flex items-center gap-2">
-                        {!sale.deletedAt && sale.workerBId && !sale.workerAId ? (
-                          <Badge variant="yellow">Awaiting Sales</Badge>
-                        ) : (
-                          <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
-                            {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
-                          </Badge>
-                        )}
-                        <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px]">{sale.saleType}</span>
-                      </div>
+            const allExpanded = sortedDates.every((d) => expandedDates[d] !== false);
 
-                      <div className="flex items-center gap-2 text-[11px] text-slate-500">
-                        {sale.workerA && <span>Sales: <strong className="text-slate-700">{sale.workerA.name}</strong></span>}
-                        {sale.workerB && <span>Dispatch: <strong className="text-slate-700">{sale.workerB.name}</strong></span>}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
-                          className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+            const toggleAll = () => {
+              const nextState: Record<string, boolean> = {};
+              const target = !allExpanded;
+              sortedDates.forEach((d) => {
+                nextState[d] = target;
+              });
+              setExpandedDates(nextState);
+            };
+
+            return (
+              <div className="space-y-4">
+                {/* Overall Summary Bar */}
+                <div className="bg-white rounded-xl border border-slate-200 p-3.5 px-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <span className="font-semibold text-slate-900">
+                      {sales.length} {deletedOnly ? 'deleted record' : 'transaction'}{sales.length === 1 ? '' : 's'}
+                    </span>
+                    <span>across</span>
+                    <span className="font-semibold text-slate-900">{sortedDates.length} date group{sortedDates.length === 1 ? '' : 's'}</span>
+                    <span className="text-slate-300">•</span>
+                    <span>Total Volume:</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">{formatCurrency(grandTotal)}</span>
                   </div>
-                );
-              })}
-            </div>
 
-            {/* Desktop View: Full Table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    {['#', 'Date & Time', 'Customer', 'Items Summary', 'Final Total', 'Payment', 'Type', 'Verification Status', 'Staff Logged', 'Inspect'].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {sales.map((sale: any) => {
-                    const sb = sale.deletedAt
-                      ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'staff'}` }
-                      : sale.status === 'FLAGGED'
-                      ? {
-                          variant: 'orange',
-                          label: sale.workerAId && sale.workerBId
-                            ? 'Mismatch Flagged'
-                            : sale.workerBId
-                              ? 'Dispatch Awaiting Sales'
-                              : sale.paymentMode === 'CREDIT'
-                                ? 'Credit Awaiting Dispatch'
-                                : 'Sales Awaiting Dispatch',
-                        }
-                      : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition"
+                  >
+                    {allExpanded ? 'Collapse All Dates' : 'Expand All Dates'}
+                  </button>
+                </div>
+
+                {/* Date Accordions */}
+                <div className="space-y-3">
+                  {sortedDates.map((dateKey) => {
+                    const groupSales = groups[dateKey];
+                    const isExpanded = expandedDates[dateKey] !== false;
+                    const groupTotal = groupSales.reduce((acc, s) => acc + (parseFloat(s.finalTotal) || 0), 0);
+
                     return (
-                      <tr
-                        key={sale.id}
-                        onClick={() => setSelectedSale(sale)}
-                        className={`hover:bg-slate-50 transition cursor-pointer ${sale.deletedAt ? 'bg-red-50/50' : sale.status === 'FLAGGED' ? 'bg-orange-50/40' : ''}`}
+                      <div
+                        key={dateKey}
+                        className={`rounded-xl border overflow-hidden shadow-xs transition ${
+                          deletedOnly
+                            ? 'border-red-200 bg-red-50/20'
+                            : 'border-slate-200 bg-slate-50/30'
+                        }`}
                       >
-                        <td className="px-4 py-3 font-mono font-semibold text-slate-600">#{sale.id}</td>
-                        <td className="px-4 py-3 text-slate-600">{formatDateTime(sale.saleDate)}</td>
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-slate-800">{sale.customer?.name}</p>
-                          <p className="text-xs text-slate-400">{sale.customer?.phone || 'No phone'}</p>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 font-medium">
-                          {sale.saleItems?.length} item(s)
-                          <span className="text-xs text-slate-400 block truncate max-w-xs">
-                            {sale.saleItems?.map((i: any) =>
-                              `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`
-                            ).join(', ')}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 font-bold text-slate-900">
-                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? '—' : formatCurrency(parseFloat(sale.finalTotal))}
-                        </td>
-                        <td className="px-4 py-3">
-                          {!sale.deletedAt && sale.workerBId && !sale.workerAId ? (
-                            <Badge variant="yellow">Awaiting Sales entry</Badge>
-                          ) : (
-                            <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
-                              {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 text-xs font-medium">{sale.saleType}</td>
-                        <td className="px-4 py-3"><Badge variant={sb.variant}>{sb.label}</Badge></td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
-                          {sale.workerA && <div><span className="font-semibold text-blue-600">Sales:</span> {sale.workerA.name}</div>}
-                          {sale.workerB && <div><span className="font-semibold text-amber-600">Dispatch:</span> {sale.workerB.name}</div>}
-                          {!sale.workerA && !sale.workerB && <span>Admin Entry</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedSale(sale); setEditingSale(false); }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
+                        {/* Collapsible Accordion Header */}
+                        <button
+                          type="button"
+                          onClick={() => setExpandedDates((prev) => ({ ...prev, [dateKey]: !isExpanded }))}
+                          className={`w-full flex items-center justify-between p-3.5 transition text-left select-none ${
+                            deletedOnly
+                              ? 'bg-red-100/60 hover:bg-red-100/80 text-red-950 border-b border-red-200/60'
+                              : 'bg-slate-100/75 hover:bg-slate-200/60 text-slate-900 border-b border-slate-200/70'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 flex-wrap">
+                            {isExpanded ? (
+                              <ChevronDown className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-slate-600'}`} />
+                            ) : (
+                              <ChevronRight className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-slate-600'}`} />
+                            )}
+                            <Calendar className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-blue-600'}`} />
+                            <span className="text-sm font-bold tracking-tight">
+                              {dateKey !== 'Unknown Date' ? formatDate(dateKey) : 'Unknown Date'}
+                            </span>
+                            <span
+                              className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
+                                deletedOnly
+                                  ? 'bg-red-200/80 text-red-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {groupSales.length} {deletedOnly ? 'deleted record' : 'sale'}{groupSales.length === 1 ? '' : 's'}
+                            </span>
+                          </div>
+
+                          <div className="text-right text-xs">
+                            <span className="text-slate-400 font-normal mr-1.5 hidden sm:inline">Day Total:</span>
+                            <span
+                              className={`font-mono font-bold text-sm ${
+                                deletedOnly ? 'text-red-700' : 'text-slate-900'
+                              }`}
+                            >
+                              {formatCurrency(groupTotal)}
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* Collapsible Content: Transaction Cards / Rows */}
+                        {isExpanded && (
+                          <div className={`divide-y bg-white ${deletedOnly ? 'divide-red-100' : 'divide-slate-100'}`}>
+                            {groupSales.map((sale: any) => {
+                              const sb = sale.deletedAt
+                                ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'Staff'}` }
+                                : sale.status === 'FLAGGED'
+                                ? {
+                                    variant: 'orange',
+                                    label: sale.workerAId && sale.workerBId
+                                      ? 'Mismatch Flagged'
+                                      : sale.workerBId
+                                        ? 'Dispatch Awaiting Sales'
+                                        : sale.paymentMode === 'CREDIT'
+                                          ? 'Credit Awaiting Dispatch'
+                                          : 'Sales Awaiting Dispatch',
+                                  }
+                                : STATUS_BADGE[sale.status] || { variant: 'gray', label: sale.status };
+
+                              return (
+                                <div
+                                  key={sale.id}
+                                  onClick={() => { setSelectedSale(sale); setEditingSale(false); }}
+                                  className={`p-3.5 hover:bg-slate-50/80 transition flex flex-col lg:flex-row lg:items-center justify-between gap-3 cursor-pointer ${
+                                    sale.deletedAt
+                                      ? 'hover:bg-red-50/40 bg-red-50/15'
+                                      : sale.status === 'FLAGGED'
+                                      ? 'hover:bg-amber-50/50 bg-amber-50/20'
+                                      : ''
+                                  }`}
+                                >
+                                  {/* Left: Transaction details */}
+                                  <div className="flex-1 min-w-0 space-y-1.5">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="font-mono font-bold text-slate-800 text-sm">#{sale.id}</span>
+                                      <span className="text-xs text-slate-400 font-medium">
+                                        {formatDateTime(sale.saleDate || sale.createdAt)}
+                                      </span>
+                                      <Badge variant={sb.variant}>{sb.label}</Badge>
+                                      <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px] border border-slate-200">
+                                        {sale.saleType}
+                                      </span>
+                                      {!sale.deletedAt && sale.workerBId && !sale.workerAId ? (
+                                        <Badge variant="yellow">Awaiting Sales</Badge>
+                                      ) : (
+                                        <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
+                                          {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
+                                        </Badge>
+                                      )}
+                                    </div>
+
+                                    {/* Customer name and phone */}
+                                    <div className="text-xs text-slate-700 flex flex-wrap items-center gap-2">
+                                      <span className="font-bold text-slate-900 text-sm">{sale.customer?.name}</span>
+                                      <span className="text-slate-300">•</span>
+                                      <span className="text-slate-500 font-medium">{sale.customer?.phone || 'No phone'}</span>
+                                    </div>
+
+                                    {/* Items purchased */}
+                                    <div className="text-xs text-slate-600 line-clamp-1">
+                                      <span className="font-semibold text-slate-700">{sale.saleItems?.length || 0} item(s): </span>
+                                      <span className="text-slate-500">
+                                        {sale.saleItems?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`).join(', ')}
+                                      </span>
+                                    </div>
+
+                                    {/* Staff info */}
+                                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500 pt-0.5">
+                                      {sale.workerA && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <span className="text-blue-600 font-semibold">Sales:</span> {sale.workerA.name}
+                                        </span>
+                                      )}
+                                      {sale.workerB && (
+                                        <span className="inline-flex items-center gap-1">
+                                          <span className="text-amber-600 font-semibold">Dispatch:</span> {sale.workerB.name}
+                                        </span>
+                                      )}
+                                      {!sale.workerA && !sale.workerB && (
+                                        <span className="text-slate-400">Admin Entry</span>
+                                      )}
+                                      {sale.deletedAt && (
+                                        <span className="text-red-600 font-medium">
+                                          Deleted by {sale.deletedBy?.name || 'Staff'} ({formatDateTime(sale.deletedAt)})
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Right: Final Total & Action Buttons */}
+                                  <div className="flex items-center justify-between lg:justify-end gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
+                                    <div className="text-left lg:text-right">
+                                      <span className="text-[10px] text-slate-400 uppercase font-semibold block">Final Total</span>
+                                      <span className="font-extrabold text-base text-slate-900 font-mono">
+                                        {!sale.deletedAt && sale.workerBId && !sale.workerAId
+                                          ? '—'
+                                          : formatCurrency(parseFloat(sale.finalTotal))}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        type="button"
+                                        onClick={() => { setSelectedSale(sale); setEditingSale(false); }}
+                                        className="px-2.5 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-semibold flex items-center gap-1 border border-blue-200 transition"
+                                      >
+                                        <Eye className="w-3.5 h-3.5" /> View
+                                      </button>
+
+                                      {deletedOnly && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            disabled={restoreSaleMutation.isPending}
+                                            onClick={() => restoreSaleMutation.mutate(sale.id)}
+                                            className="px-2.5 py-1.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
+                                          >
+                                            <RotateCcw className="w-3.5 h-3.5" /> Restore
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={permanentDeleteMutation.isPending}
+                                            onClick={() => { setSelectedSale(sale); setShowPermanentDeleteModal(true); }}
+                                            className="px-2.5 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" /> Hard Delete
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </>
+                </div>
+              </div>
+            );
+          })()
         )}
       </div>
 

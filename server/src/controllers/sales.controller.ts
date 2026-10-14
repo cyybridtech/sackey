@@ -635,7 +635,8 @@ export const workerASale = async (
         });
       }
     } else {
-      // Stock is NOT deducted on initial BLUE sale; it will only deduct when Worker B confirms
+      // Stock is NOT deducted on initial BLUE sale; it will only deduct when Worker B confirms.
+      // Credit ledger and advance balance are also NOT touched here — they only apply on GREEN.
       const initialStatus = initialSaleStatusHelper(true);
       const newSale = await prisma.$transaction(async (tx) => {
         const sale = await tx.sale.create({
@@ -656,28 +657,8 @@ export const workerASale = async (
           include: saleInclude,
         });
 
-        let advanceApplied = 0;
-        if (applyAdvance && customer && Number(customer.advanceBalance) > 0) {
-          advanceApplied = Math.min(Number(customer.advanceBalance), finalTotal);
-          if (advanceApplied > 0) {
-            await tx.customer.update({
-              where: { id: resolvedCustomerId },
-              data: { advanceBalance: { decrement: advanceApplied } },
-            });
-          }
-        }
-
-        if (paymentMode === PaymentMode.CREDIT) {
-          await handleCreditLedger(
-            tx,
-            resolvedCustomerId,
-            sale.id,
-            finalTotal,
-            amountPaid ? Number(amountPaid) : 0,
-            workerAId,
-            advanceApplied
-          );
-        }
+        // Do NOT deduct advance balance or create credit ledger for a BLUE (pending) sale.
+        // These will be applied once the sale turns GREEN (Worker B confirms dispatch).
 
         return sale;
       });
