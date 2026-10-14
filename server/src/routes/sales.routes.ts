@@ -7,6 +7,7 @@ import {
   getMySales,
   updateSale,
   verifySale,
+  unverifySale,
   deleteSale,
   restoreSale,
   permanentDeleteSale,
@@ -30,6 +31,7 @@ router.get('/', requireRole(Role.ADMIN), getSales);
 router.get('/:id', requireRole(Role.ADMIN), getSaleById);
 router.put('/:id', requireRole(Role.ADMIN), updateSale);
 router.post('/:id/verify', requireRole(Role.ADMIN), verifySale);
+router.post('/:id/unverify', requireRole(Role.ADMIN), unverifySale);
 router.post('/:id/restore', requireRole(Role.ADMIN), restoreSale);
 router.delete('/:id/permanent', requireRole(Role.ADMIN), permanentDeleteSale);
 

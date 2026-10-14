@@ -71,6 +71,7 @@ export const getDashboard = async (
     // Total active products count and total stock units
     const totalProducts = await prisma.product.count({ where: { isActive: true } });
     const deletedSaleCount = await prisma.sale.count({ where: { deletedAt: { not: null } } });
+    const verifiedSaleCount = await prisma.sale.count({ where: { deletedAt: null, adminVerified: true } });
     const stockUnitsAggregate = await prisma.product.aggregate({
       where: { isActive: true },
       _sum: { quantity: true },
@@ -164,6 +165,7 @@ export const getDashboard = async (
         totalOutstandingDebt,
         totalProducts,
         deletedSaleCount,
+        verifiedSaleCount,
         totalStockUnits,
         pendingSms: pendingSmsCount,
         salesLast7Days,

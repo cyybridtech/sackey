@@ -14,6 +14,7 @@ import {
   Store,
   X,
   Smartphone,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useInstallApp } from '../../hooks/useInstallApp';
@@ -34,6 +35,7 @@ interface SidebarProps {
 const adminNavItems: NavItem[] = [
   { to: '/admin/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
   { to: '/admin/sales', icon: <ShoppingCart size={18} />, label: 'Sales' },
+  { to: '/admin/sales?verified=true', icon: <ShieldCheck size={18} />, label: 'Verified Sales' },
   { to: '/admin/customers', icon: <Users size={18} />, label: 'Customers' },
   { to: '/admin/products', icon: <Package size={18} />, label: 'Products' },
   { to: '/admin/credits', icon: <CreditCard size={18} />, label: 'Credits & Debts' },

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Eye, CheckCircle, Filter, AlertTriangle, ShieldCheck, HelpCircle, Pencil, Trash2, RotateCcw, ChevronDown, ChevronRight, Calendar } from 'lucide-react';
+import { Eye, CheckCircle, Filter, AlertTriangle, ShieldCheck, HelpCircle, Pencil, Trash2, RotateCcw, ChevronDown, ChevronRight, Calendar, Clock } from 'lucide-react';
 import api from '../../api/axios';
 import { formatCurrency, formatDateTime, formatDate } from '../../lib/utils';
 import Badge from '../../components/ui/Badge';
@@ -29,6 +29,7 @@ export default function SalesPage() {
   
   const statusFromUrl = searchParams.get('status') || '';
   const deletedOnly = searchParams.get('deleted') === 'true';
+  const verifiedOnly = searchParams.get('verified') === 'true';
   const selectedSaleId = Number(searchParams.get('saleId'));
   const [filters, setFilters] = useState({
     dateFrom: '',
@@ -37,10 +38,15 @@ export default function SalesPage() {
   });
 
   const { data: sales = [], isLoading } = useQuery({
-    queryKey: ['sales', filters, statusFromUrl, deletedOnly],
+    queryKey: ['sales', filters, statusFromUrl, deletedOnly, verifiedOnly],
     queryFn: async () => {
       const params = Object.fromEntries(
-        Object.entries({ ...filters, status: statusFromUrl, deleted: deletedOnly ? 'true' : '' }).filter(([, v]) => v)
+        Object.entries({
+          ...filters,
+          status: statusFromUrl,
+          deleted: deletedOnly ? 'true' : '',
+          verified: verifiedOnly ? 'true' : '',
+        }).filter(([, v]) => v)
       );
       const res = await api.get('/sales', { params });
       return res.data.data;
@@ -55,11 +61,23 @@ export default function SalesPage() {
   const verifyMutation = useMutation({
     mutationFn: (id: number) => api.post(`/sales/${id}/verify`),
     onSuccess: () => {
-      toast.success('Sale marked as verified by admin');
+      toast.success('Sale verified! Moved to the Verified page.');
       qc.invalidateQueries({ queryKey: ['sales'] });
       qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
       setSelectedSale(null);
     },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to verify sale'),
+  });
+
+  const unverifyMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/sales/${id}/unverify`),
+    onSuccess: (res: any) => {
+      toast.success(res.data?.message || 'Sale moved back to unverified sales queue');
+      qc.invalidateQueries({ queryKey: ['sales'] });
+      qc.invalidateQueries({ queryKey: ['admin-dashboard'] });
+      setSelectedSale(null);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to unverify sale'),
   });
 
   const updateSaleMutation = useMutation({
@@ -144,20 +162,90 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Sales Transactions</h1>
-          <p className="text-slate-500 text-sm">Full audit trail and dual-confirmation verification</p>
-          {deletedOnly && (
-            <p className="text-xs text-red-700 mt-1 font-semibold">Showing retained deleted records. Select “All records” to return to current sales.</p>
-          )}
+          <h1 className="text-2xl font-bold text-slate-800">
+            {deletedOnly ? 'Deleted Sales Audit Trail' : verifiedOnly ? 'Verified Sales Registry' : 'Sales Transactions'}
+          </h1>
+          <p className="text-slate-500 text-sm">
+            {deletedOnly
+              ? 'Historical deleted records retained with full dual-worker details'
+              : verifiedOnly
+              ? 'Admin-approved and certified transactions grouped by date'
+              : 'Active dual-confirmation verification queue'}
+          </p>
         </div>
+      </div>
+
+      {/* Top View Switcher Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* 1. Active Sales */}
         <button
           type="button"
-          onClick={() => setSearchParams(deletedOnly ? {} : { deleted: 'true' })}
-          className={`px-3 py-2 rounded-lg text-sm font-semibold border ${deletedOnly ? 'bg-slate-100 text-slate-700 border-slate-300' : 'bg-red-50 text-red-700 border-red-200'}`}
+          onClick={() => setSearchParams({})}
+          className={`p-4 rounded-xl border text-left transition flex items-center justify-between shadow-xs ${
+            !deletedOnly && !verifiedOnly
+              ? 'bg-blue-50/80 border-blue-400 ring-2 ring-blue-500/20'
+              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+          }`}
         >
-          {deletedOnly ? 'All records' : 'View deleted records'}
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 uppercase tracking-wider">
+              <Clock className="w-3.5 h-3.5 text-blue-600" />
+              <span>Active Sales</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Sales Queue</p>
+            <p className="text-xs text-slate-400">Transactions awaiting admin sign-off</p>
+          </div>
+          {!deletedOnly && !verifiedOnly && (
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+          )}
+        </button>
+
+        {/* 2. Verified Sales */}
+        <button
+          type="button"
+          onClick={() => setSearchParams({ verified: 'true' })}
+          className={`p-4 rounded-xl border text-left transition flex items-center justify-between shadow-xs ${
+            verifiedOnly
+              ? 'bg-emerald-50/80 border-emerald-400 ring-2 ring-emerald-500/20'
+              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+          }`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Verified Sales</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Verified Registry</p>
+            <p className="text-xs text-slate-400">Admin-approved & locked records</p>
+          </div>
+          {verifiedOnly && (
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 shrink-0" />
+          )}
+        </button>
+
+        {/* 3. Deleted Records */}
+        <button
+          type="button"
+          onClick={() => setSearchParams({ deleted: 'true' })}
+          className={`p-4 rounded-xl border text-left transition flex items-center justify-between shadow-xs ${
+            deletedOnly
+              ? 'bg-red-50/80 border-red-400 ring-2 ring-red-500/20'
+              : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50/50'
+          }`}
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-red-700 uppercase tracking-wider">
+              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+              <span>Deleted Records</span>
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Deleted Records</p>
+            <p className="text-xs text-slate-400">Restorable compliance audit trail</p>
+          </div>
+          {deletedOnly && (
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 shrink-0" />
+          )}
         </button>
       </div>
 
@@ -295,6 +383,8 @@ export default function SalesPage() {
                         className={`rounded-xl border overflow-hidden shadow-xs transition ${
                           deletedOnly
                             ? 'border-red-200 bg-red-50/20'
+                            : verifiedOnly
+                            ? 'border-emerald-200 bg-emerald-50/20'
                             : 'border-slate-200 bg-slate-50/30'
                         }`}
                       >
@@ -305,16 +395,18 @@ export default function SalesPage() {
                           className={`w-full flex items-center justify-between p-3.5 transition text-left select-none ${
                             deletedOnly
                               ? 'bg-red-100/60 hover:bg-red-100/80 text-red-950 border-b border-red-200/60'
+                              : verifiedOnly
+                              ? 'bg-emerald-100/60 hover:bg-emerald-100/80 text-emerald-950 border-b border-emerald-200/60'
                               : 'bg-slate-100/75 hover:bg-slate-200/60 text-slate-900 border-b border-slate-200/70'
                           }`}
                         >
                           <div className="flex items-center gap-2.5 flex-wrap">
                             {isExpanded ? (
-                              <ChevronDown className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-slate-600'}`} />
+                              <ChevronDown className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : verifiedOnly ? 'text-emerald-700' : 'text-slate-600'}`} />
                             ) : (
-                              <ChevronRight className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-slate-600'}`} />
+                              <ChevronRight className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : verifiedOnly ? 'text-emerald-700' : 'text-slate-600'}`} />
                             )}
-                            <Calendar className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : 'text-blue-600'}`} />
+                            <Calendar className={`w-4 h-4 ${deletedOnly ? 'text-red-700' : verifiedOnly ? 'text-emerald-700' : 'text-blue-600'}`} />
                             <span className="text-sm font-bold tracking-tight">
                               {dateKey !== 'Unknown Date' ? formatDate(dateKey) : 'Unknown Date'}
                             </span>
@@ -322,10 +414,12 @@ export default function SalesPage() {
                               className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
                                 deletedOnly
                                   ? 'bg-red-200/80 text-red-800'
+                                  : verifiedOnly
+                                  ? 'bg-emerald-200/80 text-emerald-800'
                                   : 'bg-blue-100 text-blue-800'
                               }`}
                             >
-                              {groupSales.length} {deletedOnly ? 'deleted record' : 'sale'}{groupSales.length === 1 ? '' : 's'}
+                              {groupSales.length} {deletedOnly ? 'deleted record' : verifiedOnly ? 'verified sale' : 'sale'}{groupSales.length === 1 ? '' : 's'}
                             </span>
                           </div>
 
@@ -333,7 +427,7 @@ export default function SalesPage() {
                             <span className="text-slate-400 font-normal mr-1.5 hidden sm:inline">Day Total:</span>
                             <span
                               className={`font-mono font-bold text-sm ${
-                                deletedOnly ? 'text-red-700' : 'text-slate-900'
+                                deletedOnly ? 'text-red-700' : verifiedOnly ? 'text-emerald-800' : 'text-slate-900'
                               }`}
                             >
                               {formatCurrency(groupTotal)}
@@ -343,7 +437,7 @@ export default function SalesPage() {
 
                         {/* Collapsible Content: Transaction Cards / Rows */}
                         {isExpanded && (
-                          <div className={`divide-y bg-white ${deletedOnly ? 'divide-red-100' : 'divide-slate-100'}`}>
+                          <div className={`divide-y bg-white ${deletedOnly ? 'divide-red-100' : verifiedOnly ? 'divide-emerald-100' : 'divide-slate-100'}`}>
                             {groupSales.map((sale: any) => {
                               const sb = sale.deletedAt
                                 ? { variant: 'red', label: `Deleted by ${sale.deletedBy?.name || 'Staff'}` }
@@ -369,6 +463,8 @@ export default function SalesPage() {
                                       ? 'hover:bg-red-50/40 bg-red-50/15'
                                       : sale.status === 'FLAGGED'
                                       ? 'hover:bg-amber-50/50 bg-amber-50/20'
+                                      : sale.adminVerified
+                                      ? 'hover:bg-emerald-50/30 bg-emerald-50/10'
                                       : ''
                                   }`}
                                 >
@@ -380,6 +476,11 @@ export default function SalesPage() {
                                         {formatDateTime(sale.saleDate || sale.createdAt)}
                                       </span>
                                       <Badge variant={sb.variant}>{sb.label}</Badge>
+                                      {sale.adminVerified && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[11px] font-bold border border-emerald-300">
+                                          <CheckCircle className="w-3 h-3 text-emerald-600" /> Admin Verified
+                                        </span>
+                                      )}
                                       <span className="text-slate-600 font-medium px-2 py-0.5 bg-slate-100 rounded text-[11px] border border-slate-200">
                                         {sale.saleType}
                                       </span>
@@ -442,6 +543,32 @@ export default function SalesPage() {
                                     </div>
 
                                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      {/* Verify button for Confirmed Sales */}
+                                      {!deletedOnly && sale.status === 'GREEN' && !sale.adminVerified && (
+                                        <button
+                                          type="button"
+                                          disabled={verifyMutation.isPending}
+                                          onClick={() => verifyMutation.mutate(sale.id)}
+                                          className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition shadow-xs disabled:opacity-50"
+                                          title="Verify confirmed sale and move to verified page"
+                                        >
+                                          <ShieldCheck className="w-3.5 h-3.5" /> Verify
+                                        </button>
+                                      )}
+
+                                      {/* Unverify button on Verified view */}
+                                      {verifiedOnly && sale.adminVerified && (
+                                        <button
+                                          type="button"
+                                          disabled={unverifyMutation.isPending}
+                                          onClick={() => unverifyMutation.mutate(sale.id)}
+                                          className="px-2 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-medium flex items-center gap-1 transition disabled:opacity-50"
+                                          title="Move back to unverified queue"
+                                        >
+                                          <RotateCcw className="w-3 h-3 text-slate-500" /> Unverify
+                                        </button>
+                                      )}
+
                                       <button
                                         type="button"
                                         onClick={() => { setSelectedSale(sale); setEditingSale(false); }}
@@ -620,10 +747,20 @@ export default function SalesPage() {
                       <button
                         onClick={() => verifyMutation.mutate(selectedSale.id)}
                         disabled={verifyMutation.isPending}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition text-sm font-semibold disabled:opacity-50"
                       >
-                        <CheckCircle className="w-4 h-4" />
+                        <ShieldCheck className="w-4 h-4" />
                         Verify Sale
+                      </button>
+                    )}
+                    {selectedSale.adminVerified && (
+                      <button
+                        onClick={() => unverifyMutation.mutate(selectedSale.id)}
+                        disabled={unverifyMutation.isPending}
+                        className="flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition text-sm font-semibold disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Unverify Sale
                       </button>
                     )}
                   </>

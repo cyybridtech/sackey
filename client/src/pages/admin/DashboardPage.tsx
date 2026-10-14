@@ -426,7 +426,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {(data.deletedSaleCount > 0 || flaggedCount > 0) && (
+        {(data.deletedSaleCount > 0 || flaggedCount > 0 || (data.verifiedSaleCount ?? 0) > 0) && (
           <div className="mt-5 pt-4 border-t border-white/10 flex flex-wrap gap-2.5">
             {data.deletedSaleCount > 0 && (
               <button
@@ -445,6 +445,16 @@ export default function DashboardPage() {
               >
                 <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>{flaggedCount} Mismatched / Flagged Log{flaggedCount === 1 ? '' : 's'} (Requires Review)</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {(data.verifiedSaleCount ?? 0) > 0 && (
+              <button
+                onClick={() => navigate('/admin/sales?verified=true')}
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 rounded-xl text-xs font-semibold border border-emerald-400/30 transition"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{data.verifiedSaleCount} Verified Sale{data.verifiedSaleCount === 1 ? '' : 's'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
@@ -567,40 +577,57 @@ export default function DashboardPage() {
           <span className="text-xs text-slate-400">Independent check system</span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
             {
               label: 'Sales Logged (Pending Dispatch)',
               key: 'BLUE',
+              count: data.saleStatusCounts?.BLUE ?? 0,
               cardBg: 'bg-blue-50/70 hover:bg-blue-100/80 border-blue-200 text-blue-950',
               icon: <Clock className="w-4 h-4 text-blue-600" />,
               desc: 'Worker A recorded sale; awaiting Worker B warehouse dispatch',
+              href: '/admin/sales?status=BLUE',
             },
             {
               label: 'Dispatch Logged (Pending Sales)',
               key: 'RED',
+              count: data.saleStatusCounts?.RED ?? 0,
               cardBg: 'bg-red-50/70 hover:bg-red-100/80 border-red-200 text-red-950',
               icon: <AlertCircle className="w-4 h-4 text-red-600" />,
               desc: 'Worker B dispatched goods; awaiting Worker A sales log',
+              href: '/admin/sales?status=RED',
             },
             {
               label: 'Confirmed & Matched',
               key: 'GREEN',
+              count: data.saleStatusCounts?.GREEN ?? 0,
               cardBg: 'bg-emerald-50/70 hover:bg-emerald-100/80 border-emerald-200 text-emerald-950',
               icon: <CheckCircle className="w-4 h-4 text-emerald-600" />,
-              desc: 'Both worker logs verified; stock deducted & receipt final',
+              desc: 'Both worker logs verified; ready for admin verification',
+              href: '/admin/sales?status=GREEN',
             },
             {
               label: 'Flagged / Conflicted',
               key: 'FLAGGED',
+              count: data.saleStatusCounts?.FLAGGED ?? 0,
               cardBg: 'bg-amber-50/80 hover:bg-amber-100 border-amber-300 text-amber-950 ring-2 ring-amber-400/20',
               icon: <AlertTriangle className="w-4 h-4 text-amber-600" />,
               desc: 'Quantity, price, or item mismatch detected between workers',
+              href: '/admin/sales?status=FLAGGED',
+            },
+            {
+              label: 'Verified by Admin',
+              key: 'VERIFIED',
+              count: data.verifiedSaleCount ?? 0,
+              cardBg: 'bg-teal-50/70 hover:bg-teal-100/80 border-teal-200 text-teal-950',
+              icon: <ShieldCheck className="w-4 h-4 text-teal-600" />,
+              desc: 'Owner approved and locked; stored in verified registry',
+              href: '/admin/sales?verified=true',
             },
           ].map((item) => (
             <button
               key={item.key}
-              onClick={() => navigate(`/admin/sales?status=${item.key}`)}
+              onClick={() => navigate(item.href)}
               className={`${item.cardBg} border rounded-2xl p-3.5 text-left transition-all hover:scale-[1.01] shadow-sm cursor-pointer space-y-1.5`}
             >
               <div className="flex items-center justify-between">
@@ -611,7 +638,7 @@ export default function DashboardPage() {
                 <ArrowRight className="w-3 h-3 opacity-50 shrink-0" />
               </div>
               <p className="text-3xl font-black">
-                {data.saleStatusCounts?.[item.key as keyof typeof data.saleStatusCounts] ?? 0}
+                {item.count}
               </p>
               <p className="text-[11px] text-slate-600 leading-snug">{item.desc}</p>
             </button>

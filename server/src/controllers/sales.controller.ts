@@ -963,12 +963,24 @@ export const getSales = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { status, dateFrom, dateTo, customerId, paymentMode, deleted } = req.query;
+    const { status, dateFrom, dateTo, customerId, paymentMode, deleted, verified } = req.query;
 
     const where: any = { deletedAt: deleted === 'true' ? { not: null } : null };
     if (status) where.status = status as string;
     if (customerId) where.customerId = parseInt(customerId as string);
     if (paymentMode) where.paymentMode = paymentMode as string;
+
+    // Filter by adminVerified status
+    if (deleted !== 'true') {
+      if (verified === 'true') {
+        where.adminVerified = true;
+      } else if (verified === 'all') {
+        // do not filter by adminVerified
+      } else {
+        where.adminVerified = false;
+      }
+    }
+
     if (dateFrom || dateTo) {
       where.saleDate = {};
       if (dateFrom) where.saleDate.gte = new Date(dateFrom as string);
@@ -1354,6 +1366,39 @@ export const verifySale = async (
     await createAuditLog(req.user!.userId, 'VERIFY_SALE', 'Sale', id, null, verified, req.ip);
 
     res.json({ success: true, data: verified, message: 'Sale verified by admin' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /api/sales/:id/unverify
+ * Admin: reverse verification back to confirmed but unverified state.
+ */
+export const unverifySale = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const id = parseInt(String(req.params.id));
+    const sale = await prisma.sale.findUnique({ where: { id } });
+
+    if (!sale) {
+      res.status(404).json({ success: false, error: 'Sale not found' });
+      return;
+    }
+
+    const unverified = await prisma.sale.update({
+      where: { id },
+      data: { adminVerified: false },
+      include: saleInclude,
+    });
+
+    emitToAdmin('sale:verified', unverified);
+    await createAuditLog(req.user!.userId, 'UNVERIFY_SALE', 'Sale', id, null, unverified, req.ip);
+
+    res.json({ success: true, data: unverified, message: 'Sale moved back to unverified sales' });
   } catch (err) {
     next(err);
   }

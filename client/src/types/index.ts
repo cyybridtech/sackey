@@ -146,6 +146,7 @@ export interface DashboardStats {
   totalOutstandingDebt: number;
   totalProducts: number;
   deletedSaleCount: number;
+  verifiedSaleCount?: number;
   totalStockUnits: number;
   pendingSms: number;
   salesLast7Days: { date: string; total: number; count: number }[];
