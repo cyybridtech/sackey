@@ -463,7 +463,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Top Metric Cards — 2-col on mobile ────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {/* Today's Sales — clickable */}
         <button
           onClick={() => setShowSalesReport(true)}
@@ -563,6 +563,26 @@ export default function DashboardPage() {
             <ArrowRight className="w-3 h-3" />
           </p>
         </button>
+
+        {/* Verified Sales — navigate to verified registry */}
+        <button
+          onClick={() => navigate('/admin/sales?verified=true')}
+          className="bg-white rounded-2xl p-3 sm:p-4 border border-teal-200 shadow-sm hover:shadow-md hover:border-teal-400 active:scale-95 transition text-left"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400 leading-tight">Verified Sales</span>
+            <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="text-lg sm:text-2xl font-extrabold text-teal-700 mt-1.5">
+            {(data.verifiedSaleCount ?? 0).toString()}
+          </p>
+          <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-0.5">
+            <span>View verified</span>
+            <ArrowRight className="w-3 h-3" />
+          </p>
+        </button>
       </div>
 
       {/* ── Verification Pipeline ─────────────────────────────────────────── */}
@@ -577,7 +597,7 @@ export default function DashboardPage() {
           <span className="text-xs text-slate-400">Independent check system</span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               label: 'Sales Logged (Pending Dispatch)',
@@ -614,15 +634,6 @@ export default function DashboardPage() {
               icon: <AlertTriangle className="w-4 h-4 text-amber-600" />,
               desc: 'Quantity, price, or item mismatch detected between workers',
               href: '/admin/sales?status=FLAGGED',
-            },
-            {
-              label: 'Verified by Admin',
-              key: 'VERIFIED',
-              count: data.verifiedSaleCount ?? 0,
-              cardBg: 'bg-teal-50/70 hover:bg-teal-100/80 border-teal-200 text-teal-950',
-              icon: <ShieldCheck className="w-4 h-4 text-teal-600" />,
-              desc: 'Owner approved and locked; stored in verified registry',
-              href: '/admin/sales?verified=true',
             },
           ].map((item) => (
             <button
