@@ -20,19 +20,78 @@ const router = Router();
 
 router.use(authenticate);
 
-// Worker routes — must come before /:id to avoid conflict
-router.post('/worker-a', requireRole(Role.WORKER_A), workerASale);
-router.post('/worker-b', requireRole(Role.WORKER_B), workerBSale);
-router.get('/my-sales', requireRole(Role.WORKER_A, Role.WORKER_B), getMySales);
-router.delete('/:id', requireRole(Role.ADMIN, Role.WORKER_A, Role.WORKER_B), deleteSale);
+// Worker routes
+router.post(
+  '/worker-a',
+  requireRole(Role.WORKER_A),
+  workerASale
+);
+
+router.post(
+  '/worker-b',
+  requireRole(Role.WORKER_B),
+  workerBSale
+);
+
+// Workers can view their own sales
+router.get(
+  '/my-sales',
+  requireRole(Role.WORKER_A, Role.WORKER_B),
+  getMySales
+);
+
+// Workers can delete their own sale records
+router.delete(
+  '/:id',
+  requireRole(Role.ADMIN, Role.WORKER_A, Role.WORKER_B),
+  deleteSale
+);
 
 // Admin routes
-router.get('/', requireRole(Role.ADMIN), getSales);
-router.get('/:id', requireRole(Role.ADMIN), getSaleById);
-router.put('/:id', requireRole(Role.ADMIN), updateSale);
-router.post('/:id/verify', requireRole(Role.ADMIN), verifySale);
-router.post('/:id/unverify', requireRole(Role.ADMIN), unverifySale);
-router.post('/:id/restore', requireRole(Role.ADMIN), restoreSale);
-router.delete('/:id/permanent', requireRole(Role.ADMIN), permanentDeleteSale);
+router.get(
+  '/',
+  requireRole(Role.ADMIN),
+  getSales
+);
+
+router.get(
+  '/:id',
+  requireRole(Role.ADMIN),
+  getSaleById
+);
+
+// Admins and workers can edit sales
+router.put(
+  '/:id',
+  requireRole(Role.ADMIN, Role.WORKER_A, Role.WORKER_B),
+  updateSale
+);
+
+// Verification remains admin-only
+router.post(
+  '/:id/verify',
+  requireRole(Role.ADMIN),
+  verifySale
+);
+
+router.post(
+  '/:id/unverify',
+  requireRole(Role.ADMIN),
+  unverifySale
+);
+
+// Restore remains admin-only
+router.post(
+  '/:id/restore',
+  requireRole(Role.ADMIN),
+  restoreSale
+);
+
+// Permanent deletion remains admin-only
+router.delete(
+  '/:id/permanent',
+  requireRole(Role.ADMIN),
+  permanentDeleteSale
+);
 
 export default router;
