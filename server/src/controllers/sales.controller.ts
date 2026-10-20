@@ -589,7 +589,7 @@ export const workerASale = async (
         emitSaleChanged(greenSale);
 
         await createAuditLog(workerAId, 'SALE_GREEN', 'Sale', greenSale.id, null, greenSale, req.ip);
-
+        
         res.status(201).json({
           success: true,
           data: { ...greenSale, status: undefined },
@@ -1018,8 +1018,7 @@ export const getSaleById = async (
         smsQueue: true,
       },
     });
-
-    if (!sale) {
+        if (!sale) {
       res.status(404).json({ success: false, error: 'Sale not found' });
       return;
     }
@@ -1109,8 +1108,7 @@ export const updateSale = async (
         creditLedger: true,
       },
     });
-
-    if (!existing) {
+ if (!existing) {
       res.status(404).json({ success: false, error: 'Sale not found' });
       return;
     }
@@ -1119,24 +1117,106 @@ export const updateSale = async (
       return;
     }
 
-    const { notes, discountAmount, saleType } = req.body;
-    const updateData: any = {};
-    if (notes !== undefined) updateData.notes = notes;
-    const hasFinancialEdit = saleType !== undefined || discountAmount !== undefined;
-    if (hasFinancialEdit && existing.status !== SaleStatus.GREEN) {
-      res.status(409).json({
-        success: false,
-        error: 'Only confirmed sales can have financial details edited',
-      });
-      return;
-    }
-    if (saleType !== undefined) {
-      if (saleType !== SaleType.RETAIL && saleType !== SaleType.WHOLESALE) {
-        res.status(400).json({ success: false, error: 'Sale type must be RETAIL or WHOLESALE' });
-        return;
-      }
-      updateData.saleType = saleType;
-    }
+    const {
+  notes,
+  discountAmount,
+  saleType,
+  paymentMode,
+  saleDate,
+} = req.body;
+
+const updateData: any = {};
+
+if (notes !== undefined) {
+  updateData.notes = notes;
+}
+
+// Workers may correct the sale type and payment mode on their own
+// unconfirmed sales. Discount changes remain restricted to confirmed sales.
+const isWorker =
+  req.user!.role === Role.WORKER_A ||
+  req.user!.role === Role.WORKER_B;
+
+const isOwnSale =
+  (req.user!.role === Role.WORKER_A &&
+    existing.workerAId === req.user!.userId) ||
+  (req.user!.role === Role.WORKER_B &&
+    existing.workerBId === req.user!.userId);
+
+const isAdmin = req.user!.role === Role.ADMIN;
+
+if (!isAdmin && isWorker && !isOwnSale) {
+  res.status(403).json({
+    success: false,
+    error: 'You can only edit sales you entered',
+  });
+  return;
+}
+
+if (
+  discountAmount !== undefined &&
+  existing.status !== SaleStatus.GREEN
+) {
+  res.status(409).json({
+    success: false,
+    error: 'Only confirmed sales can have discounts edited',
+  });
+  return;
+}
+
+if (saleType !== undefined) {
+  if (
+    saleType !== SaleType.RETAIL &&
+    saleType !== SaleType.WHOLESALE
+  ) {
+    res.status(400).json({
+      success: false,
+      error: 'Sale type must be RETAIL or WHOLESALE',
+    });
+    return;
+  }
+
+  updateData.saleType = saleType;
+}
+
+if (paymentMode !== undefined) {
+  if (
+    paymentMode !== PaymentMode.CC &&
+    paymentMode !== PaymentMode.CREDIT
+  ) {
+    res.status(400).json({
+      success: false,
+      error: 'Payment mode must be CC or CREDIT',
+    });
+    return;
+  }
+
+  // Do not change payment mode after a credit ledger/payment exists.
+  if (existing.creditLedger && paymentMode !== existing.paymentMode) {
+    res.status(409).json({
+      success: false,
+      error: 'Payment mode cannot be changed after a payment has been recorded',
+    });
+    return;
+  }
+
+  updateData.paymentMode = paymentMode;
+}
+
+if (saleDate !== undefined) {
+  const parsedSaleDate = new Date(saleDate);
+
+  if (Number.isNaN(parsedSaleDate.getTime())) {
+    res.status(400).json({
+      success: false,
+      error: 'A valid sale date is required',
+    });
+    return;
+  }
+
+  updateData.saleDate = parsedSaleDate;
+}
+
     let updatedFinalTotal: number | undefined;
     if (discountAmount !== undefined) {
       const discount = Number(discountAmount);
@@ -1542,4 +1622,3 @@ export const permanentDeleteSale = async (
     next(err);
   }
 };
-
