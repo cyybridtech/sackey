@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useMutation, useQuery, useQueryClient } from
-'@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardList,
   Trash2,
@@ -398,4 +397,4 @@ export default function MySalesPage() {
         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Tag className="h-5 w-5" /></div><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Credit Sales</p><p className="text-xl font-bold text-slate-900">{stats.creditCount}</p></div></div>
       </div>
 
-      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">{[{ id: 'ALL', label: 'All Transactions' }, { id: 'CC', label: 'Cash & Carry' }, { id: 'CREDIT', label: 'Credit Sales' }, { id: 'PAYMENT_ONLY', label: 'Payment Only' }].map((tab) => <button key={tab.id} onClick={() => setPaymentFilter(tab.id as any)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition ${paymentFilter === tab.id ? 'bg-slate-
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">{[{ id: 'ALL', label: 'All Transactions' }, { id: 'CC', label: 'Cash & Carry' }, { id: 'CREDIT', label: 'Credit Sales' }, { id: 'PAYMENT_ONLY', label: 'Payment Only' }].map((tab) => <button key={tab.id} onClick={() => setPaymentFilter(tab.id as any)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-b
