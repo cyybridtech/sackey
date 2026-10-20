@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from 
-"@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ClipboardList,
   Trash2,
@@ -545,4 +544,276 @@ export default function MySalesPage() {
               Today's Sales
             </p>
             <p className="truncate text-xl font-bold text-blue-700">
-              {formatCurrency(stats.toda
+              {formatCurrency(stats.todayTotal)}
+            </p>
+            <p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400">
+              <span>Resets daily</span>
+              <ChevronRight className="h-3 w-3" />
+            </p>
+          </div>
+        </button>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
+            <ClipboardList className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Total Sales
+            </p>
+            <p className="text-xl font-bold text-slate-900">
+              {stats.totalCount}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700">
+            <CreditCard className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Cash & Carry
+            </p>
+            <p className="text-xl font-bold text-slate-900">{stats.ccCount}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <Tag className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              Credit Sales
+            </p>
+            <p className="text-xl font-bold text-slate-900">
+              {stats.creditCount}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            {[
+              { id: "ALL", label: "All Transactions" },
+              { id: "CC", label: "Cash & Carry" },
+              { id: "CREDIT", label: "Credit Sales" },
+              { id: "PAYMENT_ONLY", label: "Payment Only" },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setPaymentFilter(tab.id as any)}
+                className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition ${paymentFilter === tab.id ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative sm:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by customer or sale #..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-9 pr-3.5 text-xs transition focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Spinner />
+          </div>
+        ) : filteredSales.length === 0 ? (
+          <div className="space-y-2 py-16 text-center text-slate-400">
+            <ClipboardList className="mx-auto h-12 w-12 text-slate-300" />
+            <p className="text-sm font-medium">
+              No sales recorded matching your filter.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3 bg-slate-50/50 p-3 md:hidden">
+              {filteredSales.map((sale: any) => (
+                <div
+                  key={sale.id}
+                  className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-700">
+                      Sale #{sale.id}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-slate-400">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatDateTime(sale.saleDate)}
+                    </span>
+                  </div>
+                  <div className="flex items-start justify-between border-t border-slate-100 pt-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">
+                        {sale.customer?.name?.charAt(0).toUpperCase() || "C"}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">
+                          {sale.customer?.name || "Walk-in"}
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          {sale.customer?.phone || "Walk-in Customer"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400">
+                        Final Total
+                      </p>
+                      <p className="text-base font-black text-slate-900">
+                        {formatCurrency(parseFloat(sale.finalTotal || "0"))}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-700">
+                    <div className="mb-1 flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <Layers className="h-3.5 w-3.5 text-slate-400" />
+                      <span>Items Purchased</span>
+                    </div>
+                    {sale.saleItems?.map((item: any, index: number) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between text-xs"
+                      >
+                        <span className="font-medium text-slate-800">
+                          {item.quantity}x{" "}
+                          {item.product?.name || `Product #${item.productId}`}
+                        </span>
+                        <span className="font-mono text-slate-500">
+                          {formatCurrency(parseFloat(item.subtotal || "0"))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={paymentBadgeVariant(sale.paymentMode)}>
+                        {paymentLabel(sale.paymentMode)}
+                      </Badge>
+                      <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">
+                        {sale.saleType}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <SaleEditButton sale={sale} onEdit={setEditTarget} />
+                      <button
+                        type="button"
+                        title="Delete this sale entry"
+                        onClick={() => deleteSale(sale)}
+                        className="flex items-center gap-1 rounded-xl border border-red-100 p-2 text-xs font-bold text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    {[
+                      "Sale #",
+                      "Date & Time",
+                      "Customer",
+                      "Items Summary",
+                      "Payment",
+                      "Type",
+                      "Total Amount",
+                      "Action",
+                    ].map((heading) => (
+                      <th
+                        key={heading}
+                        className="px-5 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-slate-500"
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredSales.map((sale: any) => (
+                    <tr key={sale.id} className="hover:bg-slate-50">
+                      <td className="px-5 py-4 font-mono text-xs font-bold text-slate-700">
+                        #{sale.id}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-4 text-xs text-slate-500">
+                        {formatDateTime(sale.saleDate)}
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-bold text-slate-900">
+                          {sale.customer?.name || "Walk-in Customer"}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {sale.customer?.phone || "—"}
+                        </p>
+                      </td>
+                      <td className="max-w-xs px-5 py-4 text-xs text-slate-600">
+                        {sale.saleItems?.map((item: any, index: number) => (
+                          <div key={index}>
+                            {item.quantity}x{" "}
+                            {item.product?.name || `Product #${item.productId}`}
+                          </div>
+                        ))}
+                      </td>
+                      <td className="px-5 py-4">
+                        <Badge variant={paymentBadgeVariant(sale.paymentMode)}>
+                          {paymentLabel(sale.paymentMode)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-4 text-xs font-semibold text-slate-600">
+                        {sale.saleType}
+                      </td>
+                      <td className="px-5 py-4 font-black text-slate-900">
+                        {formatCurrency(parseFloat(sale.finalTotal || "0"))}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <SaleEditButton sale={sale} onEdit={setEditTarget} />
+                          <button
+                            type="button"
+                            title="Delete this sale entry"
+                            onClick={() => deleteSale(sale)}
+                            className="rounded-xl border border-red-100 p-2 text-red-600 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      {showHistory && (
+        <SalesHistoryDrawer
+          onClose={() => setShowHistory(false)}
+          onEdit={setEditTarget}
+        />
+      )}
+      {editTarget && (
+        <EditSaleModal
+          sale={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={refreshAfterEdit}
+        />
+      )}
+    </div>
+  );
+}
