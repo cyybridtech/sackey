@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Package,
   Trash2,
+  Pencil,
   Search,
   CheckCircle2,
   Clock,
@@ -12,6 +13,7 @@ import {
   X,
   Calendar,
   ChevronRight,
+  Save,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { formatDateTime } from '../../lib/utils';
@@ -27,9 +29,128 @@ const nDaysAgo = (n: number) => {
   return d.toISOString().split('T')[0];
 };
 
+function EditDispatchModal({
+  sale,
+  onClose,
+  onSaved,
+}: {
+  sale: any;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [saleDate, setSaleDate] = useState(
+    sale.saleDate ? new Date(sale.saleDate).toISOString().slice(0, 16) : '',
+  );
+  const [paymentMode, setPaymentMode] = useState(sale.paymentMode || 'CC');
+  const [saleType, setSaleType] = useState(sale.saleType || 'WHOLESALE');
+  const [notes, setNotes] = useState(sale.notes || '');
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      api.put(`/sales/${sale.id}`, {
+        saleDate: saleDate ? new Date(saleDate).toISOString() : sale.saleDate,
+        paymentMode,
+        saleType,
+        notes,
+      }),
+    onSuccess: () => {
+      toast.success('Dispatch updated successfully');
+      onSaved();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Dispatch could not be updated');
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-slate-900 to-indigo-900 px-5 py-4 text-white">
+          <div>
+            <h2 className="text-base font-bold">Edit Dispatch #{sale.id}</h2>
+            <p className="text-xs text-blue-200">Correct the recorded dispatch information</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-xl bg-white/10 p-2 hover:bg-white/20" aria-label="Close edit dispatch dialog">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form
+          className="space-y-4 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateMutation.mutate();
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Sale date and time</span>
+            <input
+              type="datetime-local"
+              value={saleDate}
+              onChange={(event) => setSaleDate(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Payment</span>
+              <select
+                value={paymentMode}
+                onChange={(event) => setPaymentMode(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="CC">Cash &amp; Carry</option>
+                <option value="CREDIT">Credit</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Sale type</span>
+              <select
+                value={saleType}
+                onChange={(event) => setSaleType(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="WHOLESALE">Wholesale</option>
+                <option value="RETAIL">Retail</option>
+              </select>
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Notes</span>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+            Product quantities and prices are not changed by this form.
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+              Cancel
+            </button>
+            <button type="submit" disabled={updateMutation.isPending} className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50">
+              <Save className="h-4 w-4" />
+              {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ── History Drawer ─────────────────────────────────────────────────────────
 
-function DispatchHistoryDrawer({ onClose }: { onClose: () => void }) {
+function DispatchHistoryDrawer({ onClose, onEdit }: { onClose: () => void; onEdit: (sale: any) => void }) {
   const [dateFrom, setDateFrom] = useState(nDaysAgo(30));
   const [dateTo, setDateTo] = useState(todayStr());
   const [applied, setApplied] = useState({ from: nDaysAgo(30), to: todayStr() });
@@ -150,6 +271,17 @@ function DispatchHistoryDrawer({ onClose }: { onClose: () => void }) {
                       {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
                     </Badge>
                     <span className="text-xs text-slate-500 font-semibold">{sale.saleType}</span>
+                    {sale.adminVerified ? (
+                      <span className="ml-auto rounded-lg bg-green-100 px-2 py-1 text-xs font-bold text-green-700">Verified</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onEdit(sale)}
+                        className="ml-auto flex items-center gap-1 rounded-lg border border-indigo-100 px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50"
+                      >
+                        <Pencil className="h-3 w-3" /> Edit
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -188,6 +320,7 @@ export default function MyConfirmationsPage() {
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CC' | 'CREDIT'>('ALL');
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [editTarget, setEditTarget] = useState<any>(null);
   const [showHistory, setShowHistory] = useState(false);
 
   const { data: sales = [], isLoading } = useQuery({
@@ -210,6 +343,19 @@ export default function MyConfirmationsPage() {
     },
     onError: (error: any) => toast.error(error.response?.data?.error || 'Dispatch could not be deleted'),
   });
+
+  const refreshAfterEdit = async () => {
+    setEditTarget(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['my-confirmations'] }),
+      queryClient.invalidateQueries({ queryKey: ['my-sales'] }),
+      queryClient.invalidateQueries({ queryKey: ['my-dispatch-history'] }),
+      queryClient.invalidateQueries({ queryKey: ['products-catalog'] }),
+      queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] }),
+      queryClient.invalidateQueries({ queryKey: ['products'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+    ]);
+  };
 
   const todayDate = todayStr();
 
@@ -315,7 +461,7 @@ export default function MyConfirmationsPage() {
 
       {/* Filter & Search Controls */}
       <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
             {[
               { id: 'ALL', label: 'All Dispatches' },
@@ -411,16 +557,31 @@ export default function MyConfirmationsPage() {
                         {sale.saleType}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      title="Delete this dispatch entry"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => setDeleteTarget(sale)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-xl disabled:opacity-50 flex items-center gap-1 text-xs font-bold border border-red-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete</span>
-                    </button>
+                    {sale.adminVerified ? (
+                      <span className="rounded-lg bg-green-100 px-2 py-1 text-xs font-bold text-green-700">Verified</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          title="Edit this dispatch entry"
+                          onClick={() => setEditTarget(sale)}
+                          className="flex items-center gap-1 rounded-xl border border-indigo-100 p-2 text-xs font-bold text-indigo-600 hover:bg-indigo-50"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete this dispatch entry"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => setDeleteTarget(sale)}
+                          className="flex items-center gap-1 rounded-xl border border-red-100 p-2 text-xs font-bold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -462,15 +623,29 @@ export default function MyConfirmationsPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <button
-                          type="button"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => setDeleteTarget(sale)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Delete dispatch"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {sale.adminVerified ? (
+                          <span className="rounded-lg bg-green-100 px-2 py-1 text-xs font-bold text-green-700">Verified</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditTarget(sale)}
+                              className="rounded-lg p-1.5 text-indigo-600 transition hover:bg-indigo-50"
+                              title="Edit dispatch"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={deleteMutation.isPending}
+                              onClick={() => setDeleteTarget(sale)}
+                              className="rounded-lg p-1.5 text-red-600 transition hover:bg-red-50"
+                              title="Delete dispatch"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -496,7 +671,19 @@ export default function MyConfirmationsPage() {
         loading={deleteMutation.isPending}
       />
 
-      {showHistory && <DispatchHistoryDrawer onClose={() => setShowHistory(false)} />}
+      {showHistory && (
+        <DispatchHistoryDrawer
+          onClose={() => setShowHistory(false)}
+          onEdit={setEditTarget}
+        />
+      )}
+      {editTarget && (
+        <EditDispatchModal
+          sale={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={refreshAfterEdit}
+        />
+      )}
     </div>
   );
 }
