@@ -1116,6 +1116,10 @@ export const updateSale = async (
       res.status(409).json({ success: false, error: 'Deleted sales cannot be edited' });
       return;
     }
+    if (existing.adminVerified) {
+      res.status(409).json({ success: false, error: 'Verified sales cannot be edited' });
+      return;
+    }
 
     const {
   notes,
@@ -1199,8 +1203,7 @@ if (paymentMode !== undefined) {
     });
     return;
   }
-
-  updateData.paymentMode = paymentMode;
+updateData.paymentMode = paymentMode;
 }
 
 if (saleDate !== undefined) {
@@ -1326,6 +1329,10 @@ export const deleteSale = async (
     }
     if (sale.deletedAt) {
       res.status(409).json({ success: false, error: 'This sale has already been deleted' });
+      return;
+    }
+    if (sale.adminVerified) {
+      res.status(409).json({ success: false, error: 'Verified sales cannot be deleted' });
       return;
     }
 
