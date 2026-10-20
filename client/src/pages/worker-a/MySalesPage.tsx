@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ClipboardList,
   Trash2,
+  Pencil,
   Search,
   ShoppingCart,
   DollarSign,
@@ -13,15 +14,13 @@ import {
   Tag,
   X,
   ChevronRight,
+  Save,
 } from 'lucide-react';
 import api from '../../api/axios';
 import { formatCurrency, formatDateTime } from '../../lib/utils';
 import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
-import DeleteConfirmModal from '../../components/ui/DeleteConfirmModal';
 import toast from 'react-hot-toast';
-
-// ── helpers ──────────────────────────────────────────────────────────────────
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -31,9 +30,190 @@ const nDaysAgo = (n: number) => {
   return d.toISOString().split('T')[0];
 };
 
-// ── History Drawer ─────────────────────────────────────────────────────────
+function EditSaleModal({
+  sale,
+  onClose,
+  onSaved,
+}: {
+  sale: any;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [saleDate, setSaleDate] = useState(
+    sale.saleDate ? new Date(sale.saleDate).toISOString().slice(0, 16) : ''
+  );
+  const [paymentMode, setPaymentMode] = useState(sale.paymentMode || 'CC');
+  const [saleType, setSaleType] = useState(sale.saleType || '');
+  const [customerName, setCustomerName] = useState(sale.customer?.name || '');
+  const [customerPhone, setCustomerPhone] = useState(sale.customer?.phone || '');
 
-function SalesHistoryDrawer({ onClose }: { onClose: () => void }) {
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      const payload = {
+        saleDate: saleDate ? new Date(saleDate).toISOString() : sale.saleDate,
+        paymentMode,
+        saleType,
+        customerName,
+        customerPhone,
+      };
+
+      return api.put(`/sales/${sale.id}`, payload);
+    },
+    onSuccess: () => {
+      toast.success('Sale updated successfully');
+      onSaved();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Sale could not be updated');
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-blue-900 to-indigo-900 px-5 py-4 text-white">
+          <div>
+            <h2 className="text-base font-bold">Edit Sale #{sale.id}</h2>
+            <p className="text-xs text-blue-200">Correct the recorded sale information</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-white/10 p-2 transition hover:bg-white/20"
+            aria-label="Close edit sale dialog"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <form
+          className="space-y-4 p-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateMutation.mutate();
+          }}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Customer name</span>
+              <input
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+                placeholder="Walk-in Customer"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Customer phone</span>
+              <input
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+                placeholder="Phone number"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-600">Sale date and time</span>
+            <input
+              type="datetime-local"
+              value={saleDate}
+              onChange={(event) => setSaleDate(event.target.value)}
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Payment</span>
+              <select
+                value={paymentMode}
+                onChange={(event) => setPaymentMode(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="CC">Cash & Carry</option>
+                <option value="CREDIT">Credit</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Sale type</span>
+              <input
+                value={saleType}
+                onChange={(event) => setSaleType(event.target.value)}
+                placeholder="Sale type"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Items in this sale</p>
+            {sale.saleItems?.length ? (
+              <div className="space-y-1.5">
+                {sale.saleItems.map((item: any, index: number) => (
+                  <div key={index} className="flex justify-between text-xs text-slate-700">
+                    <span>{item.quantity}x {item.product?.name || `Product #${item.productId}`}</span>
+                    <span>{formatCurrency(parseFloat(item.subtotal || '0'))}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">No item details available.</p>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Total: <strong className="text-slate-900">{formatCurrency(parseFloat(sale.finalTotal || '0'))}</strong>
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save className="h-4 w-4" />
+              {updateMutation.isPending ? 'Saving...' : 'Save changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SaleEditButton({ sale, onEdit }: { sale: any; onEdit: (sale: any) => void }) {
+  return (
+    <button
+      type="button"
+      title={`Edit sale #${sale.id}`}
+      onClick={() => onEdit(sale)}
+      className="flex items-center gap-1 rounded-xl border border-blue-100 p-2 text-xs font-bold text-blue-600 hover:bg-blue-50"
+    >
+      <Pencil className="h-3.5 w-3.5" />
+      <span>Edit</span>
+    </button>
+  );
+}
+
+function SalesHistoryDrawer({
+  onClose,
+  onEdit,
+}: {
+  onClose: () => void;
+  onEdit: (sale: any) => void;
+}) {
   const [dateFrom, setDateFrom] = useState(nDaysAgo(30));
   const [dateTo, setDateTo] = useState(todayStr());
   const [applied, setApplied] = useState({ from: nDaysAgo(30), to: todayStr() });
@@ -49,124 +229,71 @@ function SalesHistoryDrawer({ onClose }: { onClose: () => void }) {
   });
 
   const periodTotal = useMemo(
-    () => historySales.reduce((s: number, sale: any) => s + parseFloat(sale.finalTotal || '0'), 0),
+    () => historySales.reduce((sum: number, sale: any) => sum + parseFloat(sale.finalTotal || '0'), 0),
     [historySales]
   );
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Panel — slides in from right */}
-      <div className="relative ml-auto w-full max-w-2xl bg-white h-full flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 shrink-0 bg-gradient-to-r from-blue-900 to-indigo-900 text-white">
+      <div className="relative ml-auto flex h-full w-full max-w-2xl flex-col bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-gradient-to-r from-blue-900 to-indigo-900 px-5 py-4 text-white">
           <div>
             <h2 className="text-base font-bold">Sales History</h2>
             <p className="text-xs text-blue-200">Select a date range to explore</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="rounded-xl bg-white/10 p-2 transition hover:bg-white/20" aria-label="Close sales history">
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Date Filter */}
-        <div className="px-5 py-3.5 border-b border-slate-100 bg-slate-50 shrink-0">
-          <div className="flex flex-col sm:flex-row items-end gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">From</label>
-              <input
-                type="date"
-                value={dateFrom}
-                max={dateTo}
-                onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-semibold text-slate-500 mb-1">To</label>
-              <input
-                type="date"
-                value={dateTo}
-                min={dateFrom}
-                max={todayStr()}
-                onChange={(e) => setDateTo(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <button
-              onClick={() => setApplied({ from: dateFrom, to: dateTo })}
-              className="px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition whitespace-nowrap"
-            >
-              Apply
-            </button>
+        <div className="shrink-0 border-b border-slate-100 bg-slate-50 px-5 py-3.5">
+          <div className="flex flex-col items-end gap-3 sm:flex-row">
+            <label className="flex-1">
+              <span className="mb-1 block text-xs font-semibold text-slate-500">From</span>
+              <input type="date" value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </label>
+            <label className="flex-1">
+              <span className="mb-1 block text-xs font-semibold text-slate-500">To</span>
+              <input type="date" value={dateTo} min={dateFrom} max={todayStr()} onChange={(event) => setDateTo(event.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </label>
+            <button onClick={() => setApplied({ from: dateFrom, to: dateTo })} className="whitespace-nowrap rounded-xl bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700">Apply</button>
           </div>
         </div>
 
-        {/* Results */}
         <div className="flex-1 overflow-y-auto">
           {isFetching ? (
-            <div className="flex justify-center py-16">
-              <Spinner />
-            </div>
+            <div className="flex justify-center py-16"><Spinner /></div>
           ) : historySales.length === 0 ? (
-            <div className="text-center py-16 text-slate-400 space-y-2">
-              <Calendar className="w-12 h-12 mx-auto text-slate-300" />
-              <p className="text-sm font-medium">No sales in this period.</p>
-            </div>
+            <div className="space-y-2 py-16 text-center text-slate-400"><Calendar className="mx-auto h-12 w-12 text-slate-300" /><p className="text-sm font-medium">No sales in this period.</p></div>
           ) : (
-            <div className="p-4 space-y-2.5">
+            <div className="space-y-2.5 p-4">
               {historySales.map((sale: any) => (
-                <div
-                  key={sale.id}
-                  className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2 shadow-sm"
-                >
+                <div key={sale.id} className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-lg">
-                      Sale #{sale.id}
-                    </span>
+                    <span className="rounded-lg bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-600">Sale #{sale.id}</span>
                     <span className="text-xs text-slate-400">{formatDateTime(sale.saleDate)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900 text-sm">
-                      {sale.customer?.name || 'Walk-in Customer'}
-                    </span>
-                    <span className="font-black text-slate-900">
-                      {formatCurrency(parseFloat(sale.finalTotal))}
-                    </span>
+                    <span className="text-sm font-bold text-slate-900">{sale.customer?.name || 'Walk-in Customer'}</span>
+                    <span className="font-black text-slate-900">{formatCurrency(parseFloat(sale.finalTotal || '0'))}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
-                      {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
-                    </Badge>
-                    <span className="text-xs text-slate-500 font-semibold">{sale.saleType}</span>
+                    <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>{sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}</Badge>
+                    <span className="text-xs font-semibold text-slate-500">{sale.saleType}</span>
                   </div>
+                  <div className="flex justify-end border-t border-slate-100 pt-2"><SaleEditButton sale={sale} onEdit={onEdit} /></div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Summary Footer */}
         {historySales.length > 0 && (
-          <div className="shrink-0 border-t border-slate-200 px-5 py-4 bg-slate-50">
+          <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
-                  {historySales.length} transaction{historySales.length !== 1 ? 's' : ''}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {applied.from} → {applied.to}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-500">Period Total</p>
-                <p className="text-xl font-black text-blue-700">{formatCurrency(periodTotal)}</p>
-              </div>
+              <div><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{historySales.length} transaction{historySales.length !== 1 ? 's' : ''}</p><p className="text-xs text-slate-400">{applied.from} → {applied.to}</p></div>
+              <div className="text-right"><p className="text-xs text-slate-500">Period Total</p><p className="text-xl font-black text-blue-700">{formatCurrency(periodTotal)}</p></div>
             </div>
           </div>
         )}
@@ -175,14 +302,12 @@ function SalesHistoryDrawer({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
 export default function MySalesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'CC' | 'CREDIT'>('ALL');
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
 
   const { data: sales = [], isLoading } = useQuery({
     queryKey: ['my-sales'],
@@ -192,322 +317,73 @@ export default function MySalesPage() {
     },
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => api.delete(`/sales/${id}`),
-    onSuccess: () => {
+  const deleteSale = async (sale: any) => {
+    if (!window.confirm(`Delete sale #${sale.id}? This action cannot be undone.`)) return;
+    try {
+      await api.delete(`/sales/${sale.id}`);
       toast.success('Sale removed; the store owner can review the retained record');
-      void queryClient.invalidateQueries({ queryKey: ['my-sales'] });
-      void queryClient.invalidateQueries({ queryKey: ['products-catalog'] });
-      void queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] });
-      void queryClient.invalidateQueries({ queryKey: ['products'] });
-      void queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] });
-    },
-    onError: (error: any) => toast.error(error.response?.data?.error || 'Sale could not be deleted'),
-  });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['my-sales'] }),
+        queryClient.invalidateQueries({ queryKey: ['my-sales-history'] }),
+        queryClient.invalidateQueries({ queryKey: ['products-catalog'] }),
+        queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] }),
+        queryClient.invalidateQueries({ queryKey: ['products'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+      ]);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Sale could not be deleted');
+    }
+  };
 
-  // Today's sales total (all sales today regardless of status for this worker's view)
+  const refreshAfterEdit = async () => {
+    setEditTarget(null);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['my-sales'] }),
+      queryClient.invalidateQueries({ queryKey: ['my-sales-history'] }),
+      queryClient.invalidateQueries({ queryKey: ['products-catalog'] }),
+      queryClient.invalidateQueries({ queryKey: ['products-catalog-b'] }),
+      queryClient.invalidateQueries({ queryKey: ['products'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin-dashboard'] }),
+    ]);
+  };
+
   const todayDate = todayStr();
   const stats = useMemo(() => {
-    const totalCount = sales.length;
     let todayTotal = 0;
     let allTimeTotal = 0;
     let ccCount = 0;
     let creditCount = 0;
-
-    sales.forEach((s: any) => {
-      const amount = parseFloat(s.finalTotal || '0');
+    sales.forEach((sale: any) => {
+      const amount = parseFloat(sale.finalTotal || '0');
       allTimeTotal += amount;
-      if (String(s.saleDate).startsWith(todayDate)) {
-        todayTotal += amount;
-      }
-      if (s.paymentMode === 'CC') ccCount++;
-      else if (s.paymentMode === 'CREDIT') creditCount++;
+      if (String(sale.saleDate).startsWith(todayDate)) todayTotal += amount;
+      if (sale.paymentMode === 'CC') ccCount++;
+      else if (sale.paymentMode === 'CREDIT') creditCount++;
     });
-
-    return { totalCount, todayTotal, allTimeTotal, ccCount, creditCount };
+    return { totalCount: sales.length, todayTotal, allTimeTotal, ccCount, creditCount };
   }, [sales, todayDate]);
 
-  // Filtered sales
-  const filteredSales = useMemo(() => {
-    return sales.filter((sale: any) => {
-      const customerName = sale.customer?.name?.toLowerCase() || '';
-      const saleId = String(sale.id);
-      const matchesSearch =
-        !search || customerName.includes(search.toLowerCase()) || saleId.includes(search);
-      const matchesPayment = paymentFilter === 'ALL' || sale.paymentMode === paymentFilter;
-      return matchesSearch && matchesPayment;
-    });
-  }, [sales, search, paymentFilter]);
+  const filteredSales = useMemo(() => sales.filter((sale: any) => {
+    const customerName = sale.customer?.name?.toLowerCase() || '';
+    const saleId = String(sale.id);
+    const matchesSearch = !search || customerName.includes(search.toLowerCase()) || saleId.includes(search);
+    const matchesPayment = paymentFilter === 'ALL' || sale.paymentMode === paymentFilter;
+    return matchesSearch && matchesPayment;
+  }), [sales, search, paymentFilter]);
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-lg relative overflow-hidden">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-xs font-semibold text-blue-200 border border-white/10 mb-2">
-              <ShoppingCart className="w-3.5 h-3.5" />
-              <span>Sales Desk Log</span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black">Sales History</h1>
-            <p className="text-blue-100/80 text-xs sm:text-sm mt-0.5">
-              Review and track customer transactions recorded from your desk
-            </p>
-          </div>
-        </div>
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 p-5 text-white shadow-lg sm:p-6">
+        <div className="relative z-10"><div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold text-blue-200"><ShoppingCart className="h-3.5 w-3.5" /><span>Sales Desk Log</span></div><h1 className="text-xl font-black sm:text-2xl">Sales History</h1><p className="mt-0.5 text-xs text-blue-100/80 sm:text-sm">Review and track customer transactions recorded from your desk</p></div>
       </div>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Today's Sales — clickable */}
-        <button
-          onClick={() => setShowHistory(true)}
-          className="bg-white p-4 rounded-2xl border border-blue-200 shadow-sm flex items-center gap-3 hover:border-blue-400 hover:shadow-md transition-all active:scale-95 text-left"
-        >
-          <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-            <DollarSign className="w-5 h-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Today's Sales</p>
-            <p className="text-xl font-bold text-blue-700 truncate">{formatCurrency(stats.todayTotal)}</p>
-            <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-              <span>Resets daily</span>
-              <ChevronRight className="w-3 h-3" />
-            </p>
-          </div>
-        </button>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
-            <ClipboardList className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Sales</p>
-            <p className="text-xl font-bold text-slate-900">{stats.totalCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-100 text-green-700 flex items-center justify-center shrink-0">
-            <CreditCard className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Cash & Carry</p>
-            <p className="text-xl font-bold text-slate-900">{stats.ccCount}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-            <Tag className="w-5 h-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Credit Sales</p>
-            <p className="text-xl font-bold text-slate-900">{stats.creditCount}</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <button onClick={() => setShowHistory(true)} className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-400 hover:shadow-md active:scale-95"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700"><DollarSign className="h-5 w-5" /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Today's Sales</p><p className="truncate text-xl font-bold text-blue-700">{formatCurrency(stats.todayTotal)}</p><p className="mt-0.5 flex items-center gap-1 text-[10px] text-slate-400"><span>Resets daily</span><ChevronRight className="h-3 w-3" /></p></div></button>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><ClipboardList className="h-5 w-5" /></div><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Sales</p><p className="text-xl font-bold text-slate-900">{stats.totalCount}</p></div></div>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100 text-green-700"><CreditCard className="h-5 w-5" /></div><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Cash & Carry</p><p className="text-xl font-bold text-slate-900">{stats.ccCount}</p></div></div>
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Tag className="h-5 w-5" /></div><div><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Credit Sales</p><p className="text-xl font-bold text-slate-900">{stats.creditCount}</p></div></div>
       </div>
 
-      {/* Filter & Search Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-3.5 shadow-sm space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-            {[
-              { id: 'ALL', label: 'All Transactions' },
-              { id: 'CC', label: 'Cash & Carry' },
-              { id: 'CREDIT', label: 'Credit Sales' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setPaymentFilter(tab.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition ${
-                  paymentFilter === tab.id
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">{[{ id: 'ALL', label: 'All Transactions' }, { id: 'CC', label: 'Cash & Carry' }, { id: 'CREDIT', label: 'Credit Sales' }].map((tab) => <button key={tab.id} onClick={() => setPaymentFilter(tab.id as any)} className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition ${paymentFilter === tab.id ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>{tab.label}</button>)}</div><div className="relative sm:w-64"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="text" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by customer or sale #..." className="w-full rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-9 pr-3.5 text-xs transition focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" /></div></div></div>
 
-          <div className="relative sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by customer or sale #..."
-              className="w-full pl-9 pr-3.5 py-1.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50 focus:bg-white transition"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Main List */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Spinner />
-          </div>
-        ) : filteredSales.length === 0 ? (
-          <div className="text-center py-16 text-slate-400 space-y-2">
-            <ClipboardList className="w-12 h-12 mx-auto text-slate-300" />
-            <p className="text-sm font-medium">No sales recorded matching your filter.</p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile View */}
-            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
-              {filteredSales.map((sale: any) => (
-                <div
-                  key={sale.id}
-                  className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-slate-700 text-xs px-2 py-0.5 bg-slate-100 rounded-lg">
-                      Sale #{sale.id}
-                    </span>
-                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {formatDateTime(sale.saleDate)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-start justify-between border-t border-slate-100 pt-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
-                        {sale.customer?.name?.charAt(0).toUpperCase() || 'C'}
-                      </div>
-                      <div>
-                        <p className="font-bold text-slate-900 text-sm">{sale.customer?.name || 'Walk-in'}</p>
-                        <p className="text-[11px] text-slate-400">{sale.customer?.phone || 'Walk-in Customer'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Final Total</p>
-                      <p className="font-black text-slate-900 text-base">
-                        {formatCurrency(parseFloat(sale.finalTotal))}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-700 border border-slate-100 space-y-1.5">
-                    <div className="flex items-center gap-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                      <Layers className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Items Purchased</span>
-                    </div>
-                    {sale.saleItems?.map((item: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center text-xs">
-                        <span className="font-medium text-slate-800">
-                          {item.quantity}x {item.product?.name || `Product #${item.productId}`}
-                        </span>
-                        <span className="text-slate-500 font-mono">
-                          {formatCurrency(parseFloat(item.subtotal))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
-                    <div className="flex items-center gap-2">
-                      <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
-                        {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
-                      </Badge>
-                      <span className="text-slate-600 font-bold px-2 py-0.5 bg-slate-100 rounded text-[11px]">
-                        {sale.saleType}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      title="Delete this sale entry"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => setDeleteTarget(sale)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-xl disabled:opacity-50 flex items-center gap-1 text-xs font-bold border border-red-100"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Desktop View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    {['Sale #', 'Date & Time', 'Customer', 'Items Summary', 'Payment', 'Type', 'Total Amount', 'Action'].map(
-                      (h) => (
-                        <th key={h} className="text-left px-5 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">
-                          {h}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredSales.map((sale: any) => (
-                    <tr key={sale.id} className="hover:bg-slate-50/80 transition">
-                      <td className="px-5 py-3.5 font-mono font-bold text-xs text-slate-700">#{sale.id}</td>
-                      <td className="px-5 py-3.5 text-slate-500 text-xs">{formatDateTime(sale.saleDate)}</td>
-                      <td className="px-5 py-3.5 font-bold text-slate-900">{sale.customer?.name || 'Walk-in'}</td>
-                      <td className="px-5 py-3.5 text-xs text-slate-600 max-w-xs truncate">
-                        {sale.saleItems
-                          ?.map((i: any) => `${i.quantity}x ${i.product?.name || `Item #${i.productId}`}`)
-                          .join(', ') || `${sale.saleItems?.length} item(s)`}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <Badge variant={sale.paymentMode === 'CC' ? 'green' : 'orange'}>
-                          {sale.paymentMode === 'CC' ? 'Cash & Carry' : 'Credit'}
-                        </Badge>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                          {sale.saleType}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 font-extrabold text-slate-900">
-                        {formatCurrency(parseFloat(sale.finalTotal))}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <button
-                          type="button"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => setDeleteTarget(sale)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition"
-                          title="Delete sale"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </div>
-
-      <DeleteConfirmModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) {
-            deleteMutation.mutate(deleteTarget.id);
-            setDeleteTarget(null);
-          }
-        }}
-        title="Delete Sale Entry"
-        itemName={deleteTarget ? `Sale #${deleteTarget.id}` : undefined}
-        message="Remove this sale? The store owner will retain and be able to review its details in the sales log."
-        loading={deleteMutation.isPending}
-      />
-
-      {showHistory && <SalesHistoryDrawer onClose={() => setShowHistory(false)} />}
-    </div>
-  );
-}
+      <div className="overflow-hidden rou
