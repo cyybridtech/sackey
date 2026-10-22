@@ -508,7 +508,8 @@ export const workerASale = async (
         saleMatchesHelper(workerAData, redData);
 
       if (isMatch) {
-        // GREEN — update, deduct stock, handle credit
+        // GREEN — update and handle credit. Stock was already deducted when
+        // Worker B recorded the dispatch.
         const greenSale = await prisma.$transaction(async (tx) => {
           const claimed = await tx.sale.updateMany({
             where: {
@@ -532,13 +533,6 @@ export const workerASale = async (
             throw new SaleConflictError('This sale has already been confirmed by another request');
           }
 
-          if (!pendingRedSale.stockDeducted) {
-            await deductStock(tx, saleItems);
-            await tx.sale.update({
-              where: { id: pendingRedSale.id },
-              data: { stockDeducted: true },
-            });
-          }
           await replaceSaleItems(tx, pendingRedSale.id, saleItems, products);
 
           const updated = await tx.sale.findUnique({
@@ -604,7 +598,7 @@ export const workerASale = async (
             workerAId: null,
           },
           data: {
-            workerAId,
+workerAId,
             status: SaleStatus.FLAGGED,
             workerAData: saleSnapshotToJson(workerAData),
           },
@@ -901,15 +895,17 @@ export const workerBSale = async (
         });
       }
     } else {
-      // Stock is NOT deducted on initial RED dispatch; it will only deduct when sales desk confirms
+      // Worker B is the physical dispatch point, so stock is deducted when
+      // the dispatch is recorded, even while it waits for Worker A's entry.
       const initialStatus = initialSaleStatusHelper(false);
       const newSale = await prisma.$transaction(async (tx) => {
+        await deductStock(tx, saleItems);
         return tx.sale.create({
           data: {
             customerId: resolvedCustomerId,
             workerBId,
             status: initialStatus,
-            stockDeducted: false,
+            stockDeducted: true,
             paymentMode,
             saleType,
             originalTotal,
@@ -1193,9 +1189,7 @@ if (paymentMode !== undefined) {
       error: 'Payment mode must be CC or CREDIT',
     });
     return;
-  }
-
-  // Do not change payment mode after a credit ledger/payment exists.
+  }  // Do not change payment mode after a credit ledger/payment exists.
   if (existing.creditLedger && paymentMode !== existing.paymentMode) {
     res.status(409).json({
       success: false,
@@ -1203,7 +1197,8 @@ if (paymentMode !== undefined) {
     });
     return;
   }
-updateData.paymentMode = paymentMode;
+
+  updateData.paymentMode = paymentMode;
 }
 
 if (saleDate !== undefined) {
@@ -1629,3 +1624,5 @@ export const permanentDeleteSale = async (
     next(err);
   }
 };
+
+      
