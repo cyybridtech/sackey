@@ -420,7 +420,6 @@ export const recordPayment = async (
     const { creditLedgerId, amountPaid, notes } = req.body;
     const ledgerId = Number(creditLedgerId);
     const paid = Number(amountPaid);
-
     if (
       !Number.isInteger(customerId) ||
       customerId <= 0 ||
@@ -666,6 +665,10 @@ export const recordBulkPayment = async (
 
     const advanceToAdd = remainingCents / 100;
     const totalDebtPaid = parsedAmount - advanceToAdd;
+    const remainingDebtAfterPayment = customer.creditLedger.reduce((sum, ledger) => {
+      const update = ledgerUpdates.find((entry) => entry.id === ledger.id);
+      return sum + (update ? update.newBalance : Number(ledger.balance));
+    }, 0);
 
     const result = await prisma.$transaction(async (tx) => {
       for (const upd of ledgerUpdates) {
@@ -695,7 +698,10 @@ export const recordBulkPayment = async (
 
       if (customer.phone) {
         let smsMsg = `Dear ${customer.name}, we received GH\u20b5 ${parsedAmount.toFixed(2)}.`;
-        if (totalDebtPaid > 0) smsMsg += ` Debt cleared: GH\u20b5 ${totalDebtPaid.toFixed(2)}.`;
+        if (totalDebtPaid > 0) {
+          smsMsg += ` Applied to debt: GH\u20b5 ${totalDebtPaid.toFixed(2)}.`;
+          smsMsg += ` Remaining debt: GH\u20b5 ${remainingDebtAfterPayment.toFixed(2)}.`;
+        }
         if (advanceToAdd > 0) {
           const newAdv = parseFloat(updatedCustomer.advanceBalance.toString());
           smsMsg += ` Advance credit: GH\u20b5 ${newAdv.toFixed(2)}.`;
