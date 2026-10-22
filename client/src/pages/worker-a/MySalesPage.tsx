@@ -14,6 +14,7 @@ import {
   Tag,
   X,
   ChevronRight,
+  ChevronDown,
   Save,
 } from "lucide-react";
 import api from "../../api/axios";
@@ -440,6 +441,7 @@ export default function MySalesPage() {
   );
   const [showHistory, setShowHistory] = useState(false);
   const [editTarget, setEditTarget] = useState<any>(null);
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
 
   const { data: sales = [], isLoading } = useQuery({
     queryKey: ["my-sales"],
@@ -525,6 +527,27 @@ export default function MySalesPage() {
       }),
     [sales, search, paymentFilter],
   );
+
+  const groupedSales = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    filteredSales.forEach((sale: any) => {
+      const rawDate = sale.saleDate || sale.createdAt;
+      const dateKey = rawDate ? String(rawDate).split("T")[0] : "Unknown Date";
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(sale);
+    });
+
+    return Object.keys(groups)
+      .sort((a, b) => b.localeCompare(a))
+      .map((dateKey) => ({
+        dateKey,
+        sales: groups[dateKey].sort(
+          (a, b) =>
+            new Date(b.saleDate || b.createdAt || 0).getTime() -
+            new Date(a.saleDate || a.createdAt || 0).getTime(),
+        ),
+      }));
+  }, [filteredSales]);
 
   return (
     <div className="space-y-6">
@@ -646,8 +669,66 @@ export default function MySalesPage() {
           </div>
         ) : (
           <>
-            <div className="space-y-3 bg-slate-50/50 p-3 md:hidden">
-              {filteredSales.map((sale: any) => (
+            {groupedSales.map(({ dateKey, sales: daySales }) => {
+              const isExpanded = expandedDates[dateKey] !== false;
+              const dayTotal = daySales.reduce(
+                (total, sale) => total + (parseFloat(sale.finalTotal) || 0),
+                0,
+              );
+              const dayLabel =
+                dateKey === "Unknown Date"
+                  ? "Unknown Date"
+                  : new Date(`${dateKey}T00:00:00`).toLocaleDateString(
+                      undefined,
+                      {
+                        weekday: "long",
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      },
+                    );
+
+              return (
+                <section
+                  key={dateKey}
+                  className="mb-3 overflow-hidden border-b border-slate-200 last:mb-0 last:border-b-0"
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedDates((previous) => ({
+                        ...previous,
+                        [dateKey]: !isExpanded,
+                      }))
+                    }
+                    className="flex w-full items-center justify-between gap-3 bg-slate-100/80 px-4 py-3 text-left transition hover:bg-slate-200/80"
+                  >
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 shrink-0 text-blue-700" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 shrink-0 text-blue-700" />
+                      )}
+                      <Calendar className="h-4 w-4 shrink-0 text-blue-600" />
+                      <span className="truncate text-sm font-bold text-slate-900">
+                        {dayLabel}
+                      </span>
+                      <span className="hidden rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 sm:inline">
+                        {daySales.length} sale{daySales.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="hidden text-xs text-slate-400 sm:inline">Day Total: </span>
+                      <span className="font-mono text-sm font-bold text-slate-900">
+                        {formatCurrency(dayTotal)}
+                      </span>
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <>
+                      <div className="space-y-3 bg-slate-50/50 p-3 md:hidden">
+              {daySales.map((sale: any) => (
                 <div
                   key={sale.id}
                   className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -736,9 +817,9 @@ export default function MySalesPage() {
                   </div>
                 </div>
               ))}
-            </div>
+                      </div>
 
-            <div className="hidden overflow-x-auto md:block">
+                      <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
@@ -762,7 +843,7 @@ export default function MySalesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredSales.map((sale: any) => (
+                  {daySales.map((sale: any) => (
                     <tr key={sale.id} className="hover:bg-slate-50">
                       <td className="px-5 py-4 font-mono text-xs font-bold text-slate-700">
                         #{sale.id}
@@ -823,7 +904,12 @@ export default function MySalesPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+                      </div>
+                    </>
+                  )}
+                </section>
+              );
+            })}
           </>
         )}
       </div>
