@@ -45,10 +45,12 @@ export const getDashboard = async (
       _sum: { quantity: true },
     });
 
-    // Sale status counts
+    // Pending sale status counts. Admin-verified GREEN sales are shown in
+    // their own verifiedSaleCount card and must not inflate "Confirmed &
+    // Matched", whose link opens the unverified sales queue.
     const statusCounts = await prisma.sale.groupBy({
       by: ['status'],
-      where: { deletedAt: null },
+      where: { deletedAt: null, adminVerified: false },
       _count: { id: true },
     });
     const statusMap: Record<string, number> = {};
@@ -375,7 +377,6 @@ export const getUsers = async (
     next(err);
   }
 };
-
 /**
  * POST /api/admin/users
  * Create a new worker account.
