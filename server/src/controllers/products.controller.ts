@@ -95,8 +95,12 @@ export const getProducts = async (
       const pendingDispatchQty = redMap[p.id] || 0;
       return {
         ...p,
+        // BLUE sales have not reduced physical stock yet, so reserve them
+        // from the sales-side availability. RED dispatches have already
+        // reduced p.quantity when Worker B recorded the dispatch; subtracting
+        // pendingDispatchQty here would count that stock twice.
         availableForSales: Math.max(0, p.quantity - pendingSalesQty),
-        availableForDispatch: Math.max(0, p.quantity - pendingDispatchQty),
+        availableForDispatch: p.quantity,
         pendingSalesQty,
         pendingDispatchQty,
       };
@@ -597,4 +601,3 @@ export const rejectRestockRequest = async (
     next(err);
   }
 };
-
