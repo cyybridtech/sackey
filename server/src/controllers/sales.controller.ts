@@ -201,6 +201,32 @@ const deductStock = async (
   }
 };
 
+/** Adjust already-deducted stock when a dispatch quantity is corrected. */
+const adjustStockDelta = async (
+  tx: Prisma.TransactionClient,
+  previousItems: Array<{ productId: number; quantity: number }>,
+  nextItems: Array<{ productId: number; quantity: number }>,
+): Promise<void> => {
+  const deltas = new Map<number, number>();
+  for (const item of previousItems) {
+    deltas.set(item.productId, (deltas.get(item.productId) || 0) - item.quantity);
+  }
+  for (const item of nextItems) {
+    deltas.set(item.productId, (deltas.get(item.productId) || 0) + item.quantity);
+  }
+
+  for (const [productId, delta] of [...deltas].sort(([a], [b]) => a - b)) {
+    if (delta > 0) {
+      await deductStock(tx, [{ productId, quantity: delta, unitPrice: 0 }]);
+    } else if (delta < 0) {
+      await tx.product.update({
+        where: { id: productId },
+        data: { quantity: { increment: Math.abs(delta) } },
+      });
+    }
+  }
+};
+
 const replaceSaleItems = async (
   tx: Prisma.TransactionClient,
   saleId: number,
@@ -1126,6 +1152,10 @@ export const updateSale = async (
 } = req.body;
 
 const updateData: any = {};
+    const { items, dispatchItems } = req.body;
+    let nextSaleItems: SaleItemInput[] | undefined;
+    let nextDispatchItems: Array<{ productId: number; quantity: number }> | undefined;
+    let itemTotals: ReturnType<typeof computeTotals> | undefined;
 
 if (notes !== undefined) {
   updateData.notes = notes;
@@ -1152,6 +1182,73 @@ if (!isAdmin && isWorker && !isOwnSale) {
   });
   return;
 }
+
+    if (items !== undefined) {
+      if (!(isAdmin || req.user!.role === Role.WORKER_A)) {
+        res.status(403).json({ success: false, error: 'Only the salesperson or an admin can edit bought items' });
+        return;
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        res.status(400).json({ success: false, error: 'At least one sale item is required' });
+        return;
+      }
+      nextSaleItems = items.map((item: any) => ({
+        productId: Number(item.productId),
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unitPrice),
+      }));
+      if (nextSaleItems.some((item) => !Number.isInteger(item.productId) || !Number.isInteger(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.unitPrice) || item.unitPrice < 0)) {
+        res.status(400).json({ success: false, error: 'Each item needs a valid product, positive quantity, and non-negative price' });
+        return;
+      }
+      const products = await prisma.product.findMany({
+        where: { id: { in: nextSaleItems.map((item) => item.productId) }, isActive: true },
+        select: { id: true, price: true },
+      });
+      if (products.length !== new Set(nextSaleItems.map((item) => item.productId)).size) {
+        res.status(400).json({ success: false, error: 'One or more products are not found or inactive' });
+        return;
+      }
+      itemTotals = computeTotals(nextSaleItems, products);
+      updateData.originalTotal = itemTotals.originalTotal;
+      updateData.discountAmount = itemTotals.discountAmount;
+      updateData.finalTotal = itemTotals.finalTotal;
+      updateData.workerAData = {
+        ...((existing.workerAData as Record<string, unknown> | null) || {}),
+        items: nextSaleItems.map((item) => ({ ...item })),
+      };
+    }
+
+    if (dispatchItems !== undefined) {
+      if (!(isAdmin || req.user!.role === Role.WORKER_B)) {
+        res.status(403).json({ success: false, error: 'Only the dispatcher or an admin can edit dispatched quantities' });
+        return;
+      }
+      if (!Array.isArray(dispatchItems) || dispatchItems.length === 0) {
+        res.status(400).json({ success: false, error: 'At least one dispatched item is required' });
+        return;
+      }
+      nextDispatchItems = dispatchItems.map((item: any) => ({
+        productId: Number(item.productId),
+        quantity: Number(item.quantity),
+      }));
+      if (nextDispatchItems.some((item) => !Number.isInteger(item.productId) || !Number.isInteger(item.quantity) || item.quantity <= 0)) {
+        res.status(400).json({ success: false, error: 'Each dispatched item needs a valid product and positive quantity' });
+        return;
+      }
+      const dispatchProducts = await prisma.product.findMany({
+        where: { id: { in: nextDispatchItems.map((item) => item.productId) }, isActive: true },
+        select: { id: true },
+      });
+      if (dispatchProducts.length !== new Set(nextDispatchItems.map((item) => item.productId)).size) {
+        res.status(400).json({ success: false, error: 'One or more dispatched products are not found or inactive' });
+        return;
+      }
+      updateData.workerBData = {
+        ...((existing.workerBData as Record<string, unknown> | null) || {}),
+        items: nextDispatchItems,
+      };
+    }
 
 if (
   discountAmount !== undefined &&
@@ -1215,7 +1312,7 @@ if (saleDate !== undefined) {
   updateData.saleDate = parsedSaleDate;
 }
 
-    let updatedFinalTotal: number | undefined;
+    let updatedFinalTotal: number | undefined = itemTotals?.finalTotal;
     if (discountAmount !== undefined) {
       const discount = Number(discountAmount);
       if (!Number.isFinite(discount) || discount < 0) {
@@ -1251,6 +1348,42 @@ if (saleDate !== undefined) {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
+      if (nextDispatchItems) {
+        const previousDispatchItems = existing.workerBData && typeof existing.workerBData === 'object'
+          ? ((existing.workerBData as any).items || [])
+          : existing.saleItems.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+        if (existing.stockDeducted) {
+          await adjustStockDelta(tx, previousDispatchItems, nextDispatchItems);
+        }
+      }
+
+      if (nextSaleItems) {
+        const products = await tx.product.findMany({
+          where: { id: { in: nextSaleItems.map((item) => item.productId) }, isActive: true },
+          select: { id: true, price: true },
+        });
+        await replaceSaleItems(tx, id, nextSaleItems, products);
+      }
+
+      // A RED record is currently represented by the dispatch itself. Keep its
+      // visible sale items and provisional total in sync with the corrected
+      // Worker B quantities until Worker A provides the matching sale entry.
+      if (nextDispatchItems && !existing.workerAId) {
+        const products = await tx.product.findMany({
+          where: { id: { in: nextDispatchItems.map((item) => item.productId) }, isActive: true },
+          select: { id: true, price: true },
+        });
+        const dispatchSaleItems = nextDispatchItems.map((item) => ({
+          ...item,
+          unitPrice: Number(products.find((product) => product.id === item.productId)!.price.toString()),
+        }));
+        const dispatchTotals = computeTotals(dispatchSaleItems, products);
+        updateData.originalTotal = dispatchTotals.originalTotal;
+        updateData.discountAmount = dispatchTotals.discountAmount;
+        updateData.finalTotal = dispatchTotals.finalTotal;
+        await replaceSaleItems(tx, id, dispatchSaleItems, products);
+      }
+
       if (updatedFinalTotal !== undefined && existing.creditLedger) {
         const paidCents = Math.round(Number(existing.creditLedger.amountPaid.toString()) * 100);
         const balanceCents = Math.round(updatedFinalTotal * 100) - paidCents;

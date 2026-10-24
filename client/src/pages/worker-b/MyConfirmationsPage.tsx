@@ -44,6 +44,13 @@ function EditDispatchModal({
   const [paymentMode, setPaymentMode] = useState(sale.paymentMode || 'CC');
   const [saleType, setSaleType] = useState(sale.saleType || 'WHOLESALE');
   const [notes, setNotes] = useState(sale.notes || '');
+  const [dispatchItems, setDispatchItems] = useState(
+    (sale.workerBData?.items || sale.saleItems || []).map((item: any) => ({
+      productId: item.productId,
+      name: item.product?.name || `Product #${item.productId}`,
+      quantity: String(item.quantity ?? 1),
+    })),
+  );
 
   const updateMutation = useMutation({
     mutationFn: () =>
@@ -52,6 +59,10 @@ function EditDispatchModal({
         paymentMode,
         saleType,
         notes,
+        dispatchItems: dispatchItems.map((item: any) => ({
+          productId: Number(item.productId),
+          quantity: Number(item.quantity),
+        })),
       }),
     onSuccess: () => {
       toast.success('Dispatch updated successfully');
@@ -129,8 +140,24 @@ function EditDispatchModal({
             />
           </label>
 
-          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
-            Product quantities and prices are not changed by this form.
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Dispatched quantities</p>
+            <div className="space-y-2">
+              {dispatchItems.map((item: any, index: number) => (
+                <label key={item.productId} className="flex items-center justify-between gap-3 text-xs font-medium text-slate-700">
+                  <span className="min-w-0 truncate">{item.name}</span>
+                  <input
+                    required
+                    min="1"
+                    step="1"
+                    type="number"
+                    value={item.quantity}
+                    onChange={(event) => setDispatchItems((current: any[]) => current.map((entry, i) => i === index ? { ...entry, quantity: event.target.value } : entry))}
+                    className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">

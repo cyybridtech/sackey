@@ -58,6 +58,14 @@ function EditSaleModal({
   const [customerPhone, setCustomerPhone] = useState(
     sale.customer?.phone || "",
   );
+  const [items, setItems] = useState(
+    (sale.saleItems || []).map((item: any) => ({
+      productId: item.productId,
+      name: item.product?.name || `Product #${item.productId}`,
+      quantity: String(item.quantity ?? 1),
+      unitPrice: String(item.unitPrice ?? item.originalPrice ?? "0"),
+    })),
+  );
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -67,6 +75,11 @@ function EditSaleModal({
         saleType,
         customerName,
         customerPhone,
+        items: items.map((item: any) => ({
+          productId: Number(item.productId),
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+        })),
       };
 
       return api.put(`/sales/${sale.id}`, payload);
@@ -186,20 +199,35 @@ function EditSaleModal({
             <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
               Items in this sale
             </p>
-            {sale.saleItems?.length ? (
-              <div className="space-y-1.5">
-                {sale.saleItems.map((item: any, index: number) => (
-                  <div
-                    key={index}
-                    className="flex justify-between text-xs text-slate-700"
-                  >
-                    <span>
-                      {item.quantity}x{" "}
-                      {item.product?.name || `Product #${item.productId}`}
-                    </span>
-                    <span>
-                      {formatCurrency(parseFloat(item.subtotal || "0"))}
-                    </span>
+            {items.length ? (
+              <div className="space-y-2.5">
+                {items.map((item: any, index: number) => (
+                  <div key={item.productId} className="grid grid-cols-[1fr_82px_100px] items-end gap-2">
+                    <span className="min-w-0 pb-2 text-xs font-medium text-slate-700">{item.name}</span>
+                    <label className="text-[10px] font-semibold text-slate-500">
+                      Qty
+                      <input
+                        required
+                        min="1"
+                        step="1"
+                        type="number"
+                        value={item.quantity}
+                        onChange={(event) => setItems((current: any[]) => current.map((entry, i) => i === index ? { ...entry, quantity: event.target.value } : entry))}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
+                    <label className="text-[10px] font-semibold text-slate-500">
+                      Unit price
+                      <input
+                        required
+                        min="0"
+                        step="0.01"
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(event) => setItems((current: any[]) => current.map((entry, i) => i === index ? { ...entry, unitPrice: event.target.value } : entry))}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </label>
                   </div>
                 ))}
               </div>
