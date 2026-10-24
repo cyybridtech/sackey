@@ -62,6 +62,7 @@ function EditSaleModal({
     (sale.saleItems || []).map((item: any) => ({
       productId: item.productId,
       name: item.product?.name || `Product #${item.productId}`,
+      originalPrice: Number(item.originalPrice ?? item.unitPrice ?? 0),
       quantity: String(item.quantity ?? 1),
       unitPrice: String(item.unitPrice ?? item.originalPrice ?? "0"),
     })),
@@ -75,11 +76,15 @@ function EditSaleModal({
         saleType,
         customerName,
         customerPhone,
-        items: items.map((item: any) => ({
-          productId: Number(item.productId),
-          quantity: Number(item.quantity),
-          unitPrice: Number(item.unitPrice),
-        })),
+        ...(items.length > 0
+          ? {
+              items: items.map((item: any) => ({
+                productId: Number(item.productId),
+                quantity: Number(item.quantity),
+                unitPrice: Number(item.unitPrice),
+              })),
+            }
+          : {}),
       };
 
       return api.put(`/sales/${sale.id}`, payload);
@@ -92,6 +97,24 @@ function EditSaleModal({
       toast.error(error.response?.data?.error || "Sale could not be updated");
     },
   });
+
+  const calculation = useMemo(() => {
+    const originalTotal = items.reduce(
+      (sum: number, item: any) =>
+        sum + Number(item.originalPrice || 0) * Math.max(0, Number(item.quantity) || 0),
+      0,
+    );
+    const subtotal = items.reduce(
+      (sum: number, item: any) =>
+        sum + Number(item.unitPrice || 0) * Math.max(0, Number(item.quantity) || 0),
+      0,
+    );
+    const discount = Math.max(0, Math.round((originalTotal - subtotal) * 100) / 100);
+    const finalTotal = Math.round(subtotal * 100) / 100;
+    const amountPaid = Number(sale.creditLedger?.amountPaid || 0);
+    const remainingBalance = Math.max(0, Math.round((finalTotal - amountPaid) * 100) / 100);
+    return { originalTotal, subtotal, discount, finalTotal, amountPaid, remainingBalance };
+  }, [items, sale.creditLedger]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -203,7 +226,10 @@ function EditSaleModal({
               <div className="space-y-2.5">
                 {items.map((item: any, index: number) => (
                   <div key={item.productId} className="grid grid-cols-[1fr_82px_100px] items-end gap-2">
-                    <span className="min-w-0 pb-2 text-xs font-medium text-slate-700">{item.name}</span>
+                    <div className="min-w-0 pb-2">
+                      <span className="block truncate text-xs font-medium text-slate-700">{item.name}</span>
+                      <span className="block text-[10px] text-slate-400">List: {formatCurrency(item.originalPrice)}</span>
+                    </div>
                     <label className="text-[10px] font-semibold text-slate-500">
                       Qty
                       <input
@@ -236,12 +262,34 @@ function EditSaleModal({
                 No item details available.
               </p>
             )}
-            <p className="mt-3 text-xs text-slate-500">
-              Total:{" "}
-              <strong className="text-slate-900">
-                {formatCurrency(parseFloat(sale.finalTotal || "0"))}
-              </strong>
-            </p>
+            {items.length > 0 && (
+              <div className="mt-4 space-y-1.5 border-t border-slate-200 pt-3 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Original total</span>
+                  <strong>{formatCurrency(calculation.originalTotal)}</strong>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal at given prices</span>
+                  <strong>{formatCurrency(calculation.subtotal)}</strong>
+                </div>
+                {calculation.discount > 0 && (
+                  <div className="flex justify-between text-orange-600">
+                    <span>Discount</span>
+                    <strong>−{formatCurrency(calculation.discount)}</strong>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black text-blue-700">
+                  <span>New final total</span>
+                  <strong>{formatCurrency(calculation.finalTotal)}</strong>
+                </div>
+                {paymentMode === "CREDIT" && (
+                  <div className="flex justify-between text-red-700">
+                    <span>New remaining balance</span>
+                    <strong>{formatCurrency(calculation.remainingBalance)}</strong>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">

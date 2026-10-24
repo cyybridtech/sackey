@@ -1082,6 +1082,7 @@ export const getMySales = async (
       include: {
         customer: true,
         saleItems: { include: { product: true } },
+        creditLedger: { select: { amountPaid: true, balance: true, totalAmount: true, status: true } },
       },
       orderBy: { saleDate: 'desc' },
     });
